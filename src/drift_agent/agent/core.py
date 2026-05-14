@@ -10,8 +10,8 @@ from typing import Any, Callable
 import ollama
 import yaml
 
+from drift_agent.agent.langchain_bridge import ai_message, build_tools, human_message, messages_for_provider, system_message, tool_message
 from drift_agent.agent.prompts import SYSTEM_PROMPT, TOOLS
-from drift_agent.agent.tools import call_tool
 from drift_agent.context_tools import ContextToolkit
 from drift_agent.errors import AgentFailure, ModelNotAvailableError, OllamaConnectionError
 from drift_agent.types import AgentFinding, DriftCategory, DriftItem, PatchSpec
@@ -81,6 +81,7 @@ class DriftAgent:
             self.client = GroqChatClient(api_key=groq_api_key, base_url=groq_base_url)
         else:
             self.client = ollama.Client(host=ollama_host)
+        self.langchain_tools = build_tools(toolkit, TOOLS)
         self._check_model()
 
     def analyze(self, drift_items: list[DriftItem], on_finding: Callable[[AgentFinding, int, int], None] | None = None) -> list[AgentFinding]:
@@ -105,23 +106,22 @@ class DriftAgent:
         fast_path = self._fast_path(drift_item)
         if fast_path is not None:
             return fast_path
-        messages: list[dict[str, Any]] = [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": json.dumps(
+        messages: list[Any] = [
+            system_message(SYSTEM_PROMPT),
+            human_message(
+                json.dumps(
                     {
                         "drift_item": drift_item.to_dict(),
                         "guidance": "Investigate with tools only if necessary and return the required JSON object.",
                     }
-                ),
-            },
+                )
+            ),
         ]
         tools_called: list[str] = []
         for _ in range(6):
             response = self.client.chat(
                 model=self.model,
-                messages=messages,
+                messages=messages_for_provider(messages),
                 tools=TOOLS,
                 options={"temperature": 0.1},
             )
@@ -130,7 +130,7 @@ class DriftAgent:
             if tool_calls:
                 if len(tools_called) >= 5:
                     break
-                messages.append({"role": "assistant", "content": message.get("content", ""), "tool_calls": tool_calls})
+                messages.append(ai_message(message.get("content", ""), tool_calls=tool_calls))
                 for tool_call in tool_calls:
                     function_data = tool_call.get("function", {})
                     tool_name = function_data.get("name")
@@ -140,8 +140,8 @@ class DriftAgent:
                     if isinstance(arguments, str):
                         arguments = json.loads(arguments or "{}")
                     tools_called.append(tool_name)
-                    result = call_tool(self.toolkit, tool_name, arguments)
-                    messages.append({"role": "tool", "name": tool_name, "content": json.dumps(result)})
+                    result = self.langchain_tools[tool_name].invoke(arguments)
+                    messages.append(tool_message(json.dumps(result), tool_name))
                 continue
             try:
                 payload = self._parse_json_with_retry(messages, message.get("content", ""))
@@ -167,19 +167,19 @@ class DriftAgent:
             patch=None,
         )
 
-    def _parse_json_with_retry(self, messages: list[dict[str, Any]], content: str) -> dict[str, Any]:
+    def _parse_json_with_retry(self, messages: list[Any], content: str) -> dict[str, Any]:
         try:
             return self._parse_json_object(content)
         except json.JSONDecodeError:
             messages.extend(
                 [
-                    {"role": "assistant", "content": content},
-                    {"role": "user", "content": "Your previous response was not valid JSON. Return only the required JSON object."},
+                    ai_message(content),
+                    human_message("Your previous response was not valid JSON. Return only the required JSON object."),
                 ]
             )
             retry = self.client.chat(
                 model=self.model,
-                messages=messages,
+                messages=messages_for_provider(messages),
                 tools=TOOLS,
                 options={"temperature": 0.1},
             )

@@ -1,4 +1,5 @@
 from drift_agent.agent.core import DriftAgent, GroqChatClient
+from drift_agent.agent.langchain_bridge import ai_message, build_tools, human_message, messages_for_provider, system_message, tool_message
 from drift_agent.cli import _finding_explanation, _load_env_file
 from drift_agent.context_tools import ContextToolkit
 from drift_agent.types import DriftCategory, DriftItem
@@ -195,4 +196,44 @@ def test_finding_explanation_includes_patch_details():
     assert "Code returns this field consistently." in explanation
     assert "patch: spec add_field" in explanation
     assert "created_at" in explanation
+
+
+def test_langchain_bridge_messages_fallback_shape():
+    messages = messages_for_provider(
+        [
+            system_message("system"),
+            human_message("user"),
+            ai_message("assistant"),
+            tool_message('{"ok": true}', "search_codebase"),
+        ]
+    )
+
+    assert messages[0]["role"] == "system"
+    assert messages[1]["role"] == "user"
+    assert messages[2]["role"] == "assistant"
+    assert messages[3]["role"] == "tool"
+
+
+def test_langchain_bridge_build_tools_invokes_context_tool():
+    class DummyToolkit:
+        def call_tool(self, name, arguments):
+            return {"name": name, "arguments": arguments}
+
+    tools = build_tools(
+        DummyToolkit(),
+        [
+            {
+                "function": {
+                    "name": "search_codebase",
+                    "description": "Search",
+                    "parameters": {"type": "object", "properties": {"pattern": {"type": "string"}}, "required": ["pattern"]},
+                }
+            }
+        ],
+    )
+
+    result = tools["search_codebase"].invoke({"pattern": "TODO"})
+
+    assert result["name"] == "search_codebase"
+    assert result["arguments"] == {"pattern": "TODO"}
 

@@ -10,3 +10,4 @@ patches/
 test/
 tests/
 .env
+.pypirc

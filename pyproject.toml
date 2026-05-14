@@ -7,11 +7,15 @@ name = "api-drift-agent"
 version = "0.1.0"
 description = "CLI agent for detecting OpenAPI and FastAPI contract drift."
 readme = "README.md"
+authors=[
+  {name="Vidit Gupta", email="viditanupgupta@gmail.com"},
+]
 requires-python = ">=3.11"
 dependencies = [
   "coverage>=7,<8",
   "gitpython>=3,<4",
   "jsonschema>=4,<5",
+  "langchain-core>=0.3,<0.4",
   "libcst>=1.3,<2",
   "ollama>=0.2,<1",
   "PyYAML>=6,<7",
@@ -41,3 +45,6 @@ markers = [
   "integration: requires local Ollama model/runtime",
 ]
 
+[project.urls]
+Homepage = "https://github.com/Vidit-01/api-drift-agent"
+Issues = "https://github.com/Vidit-01/api-drift-agent/issues"

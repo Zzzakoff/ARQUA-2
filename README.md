@@ -9,7 +9,7 @@
 It is built around two layers:
 
 - a deterministic analyzer that parses the OpenAPI document, statically walks the FastAPI source tree, and reports exact contract differences
-- an optional explanation layer that asks an LLM to decide whether the spec or code should be treated as the source of truth and to propose patch artifacts
+- an explanation layer built around a LangChain agent loop that asks an LLM whether the spec or code should be treated as the source of truth and proposes patch artifacts
 
 The tool is useful when a FastAPI app and its published OpenAPI contract start evolving separately. It highlights missing endpoints, extra endpoints, schema mismatches, status-code differences, undocumented fields, required/nullability drift, and parameter drift.
 
@@ -21,6 +21,7 @@ The tool is useful when a FastAPI app and its published OpenAPI contract start e
 - Deterministic drift classification with stable IDs
 - Interactive Rich TUI for local inspection
 - JSON output for CI and automation
+- LangChain-based explanation and tool orchestration
 - Optional explain mode with either Ollama or Groq
 - Patch preview artifacts for spec and code-review workflows
 - Config-file defaults via `.drift-check.yml`
@@ -40,6 +41,14 @@ The CLI entrypoint is:
 ```bash
 drift-check
 ```
+
+The explanation layer also uses:
+
+```text
+langchain-core
+```
+
+LangChain powers the explanation agent, message flow, and tool orchestration. The spec parser, FastAPI analyzer, and diff engine remain deterministic by design.
 
 ## Quick Start
 
@@ -150,6 +159,14 @@ The panels show visual cues such as `top`, `bottom`, `up more`, `down more`, and
 
 Explain mode asks an LLM to inspect each drift item and produce an `AgentFinding`.
 
+The explain layer uses a LangChain agent architecture built around:
+
+- LangChain system/user/assistant/tool messages
+- LangChain structured tools wrapping the existing context toolkit
+- provider-specific conversion before sending requests to Ollama or Groq
+
+This gives the project a deterministic contract-analysis core with an agent-oriented reasoning layer on top.
+
 An agent finding contains:
 
 - source of truth: `CODE`, `SPEC`, or `AMBIGUOUS`
@@ -167,6 +184,23 @@ The explainability panel shows:
 - patch target/type/location when available
 - patch content preview when available
 - `manual review / no automatic codefix` when no safe patch is available
+
+### LangChain In The Project
+
+LangChain is used for the reasoning layer:
+
+- tool-driven drift investigation
+- structured message flow
+- source-of-truth decisions
+- provider-flexible explanation generation
+
+The project keeps the following layers deterministic:
+
+- OpenAPI parsing
+- FastAPI codebase analysis
+- drift comparison
+
+That split keeps contract detection exact and testable while making explainability and patch recommendation agent-driven.
 
 ### Ollama Explain Provider
 
@@ -430,8 +464,9 @@ Exit with code `1` when error-severity drift exists.
 src/drift_agent/
   agent/
     core.py          # Ollama/Groq agent orchestration and response parsing
+    langchain_bridge.py  # LangChain message and tool adapter layer
     prompts.py       # system prompt and tool schema
-    tools.py         # agent tool dispatch
+    tools.py         # context tool dispatch used by the agent layer
   code_analyzer/
     walker.py        # source tree discovery
     extractor.py     # FastAPI route/model extraction
