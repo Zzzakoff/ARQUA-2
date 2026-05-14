@@ -33,7 +33,7 @@ The tool is useful when a FastAPI app and its published OpenAPI contract start e
 Use Python 3.11 or newer.
 
 ```bash
-pip install -e .[dev]
+pip install api-drift-agent
 ```
 
 The CLI entrypoint is:
