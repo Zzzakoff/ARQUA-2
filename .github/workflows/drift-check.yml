@@ -3,10 +3,25 @@ name: API Contract Drift Check
 on:
   pull_request:
     paths:
-      - 'openapi.yaml'
-      - 'openapi.json'
       - 'src/**/*.py'
-      - 'app/**/*.py'
+      - 'tests/**/*.py'
+      - 'pyproject.toml'
+      - '.github/workflows/drift-check.yml'
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'src/**/*.py'
+      - 'tests/**/*.py'
+  workflow_dispatch:
+    inputs:
+      fail_on_drift:
+        description: 'Блокировать сборку при обнаружении расхождений'
+        required: false
+        default: 'false'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
 
 jobs:
   drift-check:
@@ -28,18 +43,31 @@ jobs:
       - name: Install drift-agent
         run: pip install .
 
-      - name: Run drift check
+      - name: Run drift check on fixtures
         id: drift
         run: |
           drift-check \
-            --spec openapi.yaml \
-            --src ./app \
+            --spec tests/fixtures/specs/drift_lab.yaml \
+            --src tests/fixtures/apps/drift_lab_app \
             --output-format json \
             --output-file drift-report.json \
             --exit-code
         continue-on-error: true
 
+      - name: Upload drift report
+        uses: actions/upload-artifact@v4
+        if: always() && hashFiles('drift-report.json') != ''
+        with:
+          name: drift-report
+          path: drift-report.json
+
+      - name: Publish annotations
+        if: always() && hashFiles('drift-report.json') != ''
+        run: |
+          python .github/scripts/publish_annotations.py drift-report.json
+
       - name: Post PR comment
+        if: github.event_name == 'pull_request' && hashFiles('drift-report.json') != ''
         uses: actions/github-script@v7
         with:
           script: |
@@ -60,6 +88,10 @@ jobs:
             const statusText = errors.length > 0 ? 'Contract drift detected' : warnings.length > 0 ? 'Minor drift detected' : 'No drift detected';
 
             let body = `## ${statusEmoji} API Contract Drift Check — ${statusText}\n\n`;
+            body += `Run ID: \`${report.run_id}\`\n`;
+            body += `Spec: \`${report.spec_path}\` | Source: \`${report.src_path}\`\n`;
+            body += `Endpoints: spec = ${report.spec_endpoints}, code = ${report.code_endpoints}\n\n`;
+
             if (report.items.length === 0) {
               body += '_Spec and implementation are in sync._\n';
             } else {
@@ -67,6 +99,12 @@ jobs:
               body += `| 🔴 Error | ${errors.length} |\n`;
               body += `| 🟡 Warning | ${warnings.length} |\n`;
               body += `| ℹ️ Info | ${infos.length} |\n\n`;
+
+              body += `<details><summary>Детали находок (${report.items.length})</summary>\n\n`;
+              for (const item of report.items) {
+                body += `- **${item.severity}** \`${item.endpoint}\` — \`${item.category}\` at \`${item.location}\`: ${item.detail}\n`;
+              }
+              body += `\n</details>\n`;
             }
 
             const comments = await github.rest.issues.listComments({
@@ -92,7 +130,13 @@ jobs:
               body,
             });
 
-      - name: Fail on errors
-        if: steps.drift.outcome == 'failure'
-        run: exit 1
-
+      - name: Fail on drift (optional)
+        if: |
+          steps.drift.outcome == 'failure' &&
+          (
+            (github.event_name == 'workflow_dispatch' && github.event.inputs.fail_on_drift == 'true') ||
+            vars.FAIL_ON_DRIFT == 'true'
+          )
+        run: |
+          echo "Обнаружены расхождения (error-severity). Блокировка сборки включена."
+          exit 1

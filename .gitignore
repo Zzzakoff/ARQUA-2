@@ -10,3 +10,6 @@ patches/
 test/
 .env
 .pypirc
+drift-report.json
+.DS_Store
+**/.DS_Store
