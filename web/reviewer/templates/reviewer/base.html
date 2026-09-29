@@ -1,0 +1,78 @@
+{% load static %}<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#050713">
+  <title>{% block title %}Patch Review{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css" rel="stylesheet">
+  <link rel="stylesheet" href="{% static 'reviewer/style.css' %}">
+</head>
+<body>
+<div class="neon-lines" aria-hidden="true"></div>
+<div class="ambient-orb one"></div>
+<div class="ambient-orb two"></div>
+
+<nav class="navbar navbar-expand-lg app-navbar">
+  <div class="container py-2">
+    <a class="navbar-brand" href="{% url 'index' %}">
+      <span class="brand-mark"><i class="bi bi-shield-check"></i></span>
+      <span class="brand-word">PATCH·REVIEW</span>
+    </a>
+    <span class="nav-subtitle ms-3">OpenAPI drift · review workspace</span>
+
+    <div class="ms-auto d-flex align-items-center gap-2">
+      {% if user.is_authenticated %}
+        <span class="user-chip d-none d-sm-inline-flex">
+          <span class="user-dot"></span>
+          {% if user.is_superuser %}<i class="bi bi-shield-fill-check"></i> {{ user.username }} · superuser{% else %}<i class="bi bi-person"></i> {{ user.username }}{% endif %}
+        </span>
+        <form method="post" action="{% url 'logout' %}" class="m-0">
+          {% csrf_token %}
+          <button class="btn btn-outline-light btn-sm"><i class="bi bi-box-arrow-right me-1"></i>Выйти</button>
+        </form>
+      {% else %}
+        <a class="btn btn-outline-light btn-sm" href="{% url 'login' %}"><i class="bi bi-person-lock me-1"></i>Войти</a>
+      {% endif %}
+    </div>
+  </div>
+</nav>
+
+<main class="container page-shell">
+  {% if messages %}
+    <div class="mb-3 fade-up">
+      {% for message in messages %}
+        <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags|default:'info' }}{% endif %} alert-dismissible fade show mb-2">
+          <i class="bi bi-info-circle me-2"></i>{{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+
+  {% block content %}{% endblock %}
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    const zone = document.querySelector('[data-upload-zone]');
+    if (zone) {
+      const input = zone.querySelector('input[type="file"]');
+      const label = zone.querySelector('[data-file-name]');
+      const updateName = () => {
+        if (input && input.files && input.files[0] && label) label.textContent = input.files[0].name;
+      };
+      if (input) input.addEventListener('change', updateName);
+      ['dragenter', 'dragover'].forEach(evt => zone.addEventListener(evt, () => zone.classList.add('dragover')));
+      ['dragleave', 'drop'].forEach(evt => zone.addEventListener(evt, () => zone.classList.remove('dragover')));
+    }
+  });
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

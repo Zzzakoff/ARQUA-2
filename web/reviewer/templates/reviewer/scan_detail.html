@@ -1,0 +1,167 @@
+{% extends 'reviewer/base.html' %}
+{% block title %}{{ scan.name }} — Patch Review{% endblock %}
+
+{% block content %}
+<header class="page-header fade-up">
+  <div>
+    <a href="{% url 'index' %}" class="breadcrumb-back"><i class="bi bi-arrow-left me-1"></i>Все сканы</a>
+    <h1 class="header-title gradient-text">{{ scan.name }}</h1>
+    <div class="header-meta">
+      <i class="bi bi-calendar3 me-1"></i>{{ scan.created_at|date:'d.m.Y H:i' }}
+      {% if scan.created_by %}<span class="mx-1">·</span><i class="bi bi-person me-1"></i>{{ scan.created_by.username }}{% endif %}
+      <span class="mx-1">·</span><i class="bi bi-layers me-1"></i>{{ scan.proposals.count }} proposals
+    </div>
+  </div>
+  <div class="export-cluster">
+    <a class="btn btn-outline-light btn-sm" href="{% url 'export_report' scan.id 'json' %}"><i class="bi bi-braces"></i>JSON</a>
+    <a class="btn btn-outline-light btn-sm" href="{% url 'export_report' scan.id 'md' %}"><i class="bi bi-markdown"></i>Markdown</a>
+    <a class="btn btn-outline-light btn-sm" href="{% url 'export_report' scan.id 'html' %}"><i class="bi bi-filetype-html"></i>HTML</a>
+    <a class="btn btn-outline-light btn-sm" href="{% url 'export_report' scan.id 'patch' %}"><i class="bi bi-file-diff"></i>Patch</a>
+  </div>
+</header>
+
+<section class="review-stats fade-up" aria-label="Сводка по ревью">
+  <div class="stat-card"><span>Всего</span><strong>{{ stats.total }}</strong></div>
+  <div class="stat-card"><span>Ожидает</span><strong>{{ stats.pending }}</strong></div>
+  <div class="stat-card stat-ok"><span>Принято</span><strong>{{ stats.accepted }}</strong></div>
+  <div class="stat-card stat-bad"><span>Отклонено</span><strong>{{ stats.rejected }}</strong></div>
+  <div class="stat-card stat-edit"><span>Изменено</span><strong>{{ stats.edited }}</strong></div>
+</section>
+
+<section class="card mb-4 fade-up">
+  <div class="card-body">
+    <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+      <div>
+        <div class="eyebrow mb-1">Patch proposal</div>
+        <h2 class="h4 section-title mb-1">Создать предложение вручную</h2>
+        <div class="section-caption">Укажи endpoint и отсутствующий HTTP-ответ — система подготовит изменение.</div>
+      </div>
+      <span class="brand-mark"><i class="bi bi-magic"></i></span>
+    </div>
+
+    {% if can_review %}
+    <form method="post">
+      {% csrf_token %}
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label">Path</label>
+          <input class="form-control" name="path" placeholder="/users/{id}" required>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">Метод</label>
+          <select class="form-select" name="method">
+            <option value="get">GET</option><option value="post">POST</option><option value="put">PUT</option>
+            <option value="delete">DELETE</option><option value="patch">PATCH</option>
+          </select>
+        </div>
+        <div class="col-md-3">
+          <label class="form-label">HTTP status</label>
+          <input class="form-control" name="status_code" value="404" required>
+        </div>
+        <div class="col-12">
+          <label class="form-label">Описание ответа</label>
+          <input class="form-control" name="description" placeholder="Пользователь не найден">
+        </div>
+      </div>
+      <button class="btn btn-primary mt-3 px-4"><i class="bi bi-lightning-charge-fill me-1"></i>Сформировать proposal</button>
+    </form>
+    {% else %}
+      <div class="review-alert warning mb-0"><i class="bi bi-lock-fill me-1"></i>Создание тестового proposal доступно только пользователю с ролью <strong>reviewer</strong>.</div>
+    {% endif %}
+  </div>
+</section>
+
+<section class="fade-up">
+  <div class="d-flex justify-content-between align-items-end gap-3 flex-wrap mb-3">
+    <div>
+      <div class="eyebrow mb-1">Review queue</div>
+      <h2 class="h4 section-title mb-0">Предложения на ревью</h2>
+    </div>
+    <form method="get" class="d-flex gap-2">
+      <select name="status" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Фильтр статуса">
+        <option value="" {% if not status_filter %}selected{% endif %}>Все статусы</option>
+        <option value="pending" {% if status_filter == 'pending' %}selected{% endif %}>Ожидает</option>
+        <option value="accepted" {% if status_filter == 'accepted' %}selected{% endif %}>Принято</option>
+        <option value="rejected" {% if status_filter == 'rejected' %}selected{% endif %}>Отклонено</option>
+        <option value="edited" {% if status_filter == 'edited' %}selected{% endif %}>Изменено</option>
+      </select>
+    </form>
+  </div>
+
+  {% for p in proposals %}
+  <article class="card proposal-card mb-3">
+    <div class="card-body">
+      <div class="proposal-top">
+        <div>
+          <h3 class="proposal-title">{{ p.title }}</h3>
+          <div class="proposal-path">
+            <span class="http-method {% if p.method == 'get' %}http-get{% elif p.method == 'post' %}http-post{% elif p.method == 'put' %}http-put{% elif p.method == 'delete' %}http-delete{% else %}http-patch{% endif %}">{{ p.method|upper }}</span>
+            <span class="path-code">{{ p.path }}</span>
+            <span class="scan-meta">{{ p.proposal_type }}</span>
+          </div>
+        </div>
+        <span class="status-badge {% if p.status == 'accepted' %}status-accepted{% elif p.status == 'rejected' %}status-rejected{% elif p.status == 'edited' %}status-edited{% else %}status-pending{% endif %}">{{ p.get_status_display }}</span>
+      </div>
+
+      <p class="reason-box">{{ p.reason }}</p>
+
+      <div class="meta-strip">
+        <span class="meta-chip"><strong>Источник истины:</strong> {{ p.source_of_truth }}</span>
+        <span class="meta-chip"><strong>Уверенность:</strong></span>
+        <span class="confidence-badge {% if p.confidence == 'high' %}conf-high{% elif p.confidence == 'medium' %}conf-medium{% else %}conf-low{% endif %}">{{ p.confidence }}</span>
+      </div>
+
+      {% if p.requires_manual_review %}
+        <div class="review-alert danger"><i class="bi bi-exclamation-triangle-fill me-1"></i><strong>Требует ручного разбора.</strong> Автоматическая правка может затронуть ручную аналитику или имеет низкую уверенность.</div>
+      {% endif %}
+
+      {% if p.manual_analytics %}
+        <div class="review-alert warning"><i class="bi bi-shield-lock-fill me-1"></i><strong>Ручная аналитика сохранена.</strong><pre class="mb-0 mt-2 small">{{ p.manual_analytics }}</pre></div>
+      {% endif %}
+
+      {% if can_review %}
+        <div class="action-row">
+          <form method="post" action="{% url 'proposal_action' p.id 'accept' %}" class="d-inline">
+            {% csrf_token %}
+            <button class="btn btn-success btn-sm" type="submit"><i class="bi bi-check-lg me-1"></i>Принять</button>
+          </form>
+          <form method="post" action="{% url 'proposal_action' p.id 'reject' %}" class="d-inline">
+            {% csrf_token %}
+            <button class="btn btn-danger btn-sm" type="submit"><i class="bi bi-x-lg me-1"></i>Отклонить</button>
+          </form>
+          <a class="btn btn-outline-light btn-sm" href="{% url 'edit_proposal' p.id %}"><i class="bi bi-pencil me-1"></i>Редактировать</a>
+        </div>
+      {% elif user.is_authenticated %}
+        <div class="review-alert warning"><i class="bi bi-person-lock me-1"></i>Вы вошли в систему, но для принятия, отклонения и редактирования нужна роль <strong>reviewer</strong>.</div>
+      {% else %}
+        <div class="review-alert warning"><i class="bi bi-lock-fill me-1"></i>Войдите как ревьюер, чтобы принимать, отклонять и редактировать правки.</div>
+      {% endif %}
+
+      {% if p.reviewed_by %}
+        <div class="scan-meta mt-3"><i class="bi bi-person-check me-1"></i>Рассмотрено: <strong style="color:#dbe5f7;">{{ p.reviewed_by.username }}</strong>{% if p.reviewed_at %} · {{ p.reviewed_at|date:'d.m.Y H:i' }}{% endif %}</div>
+      {% endif %}
+
+      <details class="diff-details">
+        <summary><i class="bi bi-code-square me-1"></i>Показать изменения «до / после»</summary>
+        <div class="row g-3 mt-1">
+          <div class="col-md-6"><div class="diff-label"><i class="bi bi-dash-circle me-1"></i>До</div><pre class="diff-pre">{{ p.before_text }}</pre></div>
+          <div class="col-md-6"><div class="diff-label"><i class="bi bi-plus-circle me-1"></i>После</div><pre class="diff-pre">{{ p.after_text }}</pre></div>
+        </div>
+      </details>
+    </div>
+  </article>
+  {% empty %}
+    <div class="glass-card p-4 text-center" style="color: var(--muted);"><i class="bi bi-check2-circle fs-3 d-block mb-2"></i>Предложений пока нет.</div>
+  {% endfor %}
+</section>
+
+{% if page_obj.has_other_pages %}
+<nav class="mt-4" aria-label="Пагинация">
+  <ul class="pagination justify-content-center">
+    {% if page_obj.has_previous %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}"><i class="bi bi-arrow-left"></i></a></li>{% endif %}
+    <li class="page-item disabled"><span class="page-link">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span></li>
+    {% if page_obj.has_next %}<li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if status_filter %}&status={{ status_filter }}{% endif %}"><i class="bi bi-arrow-right"></i></a></li>{% endif %}
+  </ul>
+</nav>
+{% endif %}
+{% endblock %}

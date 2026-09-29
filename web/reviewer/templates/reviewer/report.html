@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Отчёт: {{ scan.name }}</title>
+  <style>
+    :root { --bg:#050713; --panel:#0d1429; --cyan:#4de8ff; --violet:#9f7cff; --text:#f3f7ff; --muted:#8f9bb9; --line:rgba(143,164,214,.18); --green:#43f5a1; --amber:#ffc857; --red:#ff667a; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:44px 24px 70px; color:var(--text); background:radial-gradient(800px 500px at 0 -10%,rgba(77,232,255,.14),transparent 60%),radial-gradient(800px 500px at 110% 0,rgba(159,124,255,.14),transparent 60%),var(--bg); font:14px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+    main { max-width:1080px; margin:auto; }
+    header { padding:28px; border:1px solid var(--line); border-radius:24px; background:rgba(13,20,41,.80); margin-bottom:24px; }
+    .eyebrow { color:var(--cyan); font-size:11px; font-weight:800; letter-spacing:.16em; text-transform:uppercase; }
+    h1 { margin:6px 0 8px; font-size:34px; line-height:1.1; background:linear-gradient(90deg,#fff,var(--cyan),#c9b9ff); -webkit-background-clip:text; color:transparent; }
+    .meta { color:var(--muted); font-size:13px; }
+    article { border:1px solid var(--line); border-radius:18px; padding:20px; margin:14px 0; background:rgba(13,20,41,.74); }
+    h2 { margin:0 0 8px; font-size:18px; }
+    code { color:var(--cyan); background:rgba(77,232,255,.08); padding:2px 6px; border-radius:6px; }
+    .badge { display:inline-block; padding:3px 9px; border-radius:999px; font-size:11px; font-weight:800; border:1px solid; }
+    .high { color:var(--green); border-color:rgba(67,245,161,.3); background:rgba(67,245,161,.08); }
+    .medium { color:var(--amber); border-color:rgba(255,200,87,.3); background:rgba(255,200,87,.08); }
+    .low { color:var(--red); border-color:rgba(255,102,122,.3); background:rgba(255,102,122,.08); }
+    .row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    h3 { font-size:13px; color:#dbe4f7; }
+    pre { min-height:180px; margin:0; padding:14px; overflow:auto; white-space:pre-wrap; word-break:break-word; color:#cbd5e1; background:#050917; border:1px solid var(--line); border-radius:12px; font:12px/1.55 ui-monospace,Menlo,Consolas,monospace; }
+    @media (max-width:760px) { body{padding:24px 14px 50px}.row{grid-template-columns:1fr} h1{font-size:27px} header{padding:20px} }
+    @media print { body{background:#fff;color:#111;padding:0} header,article{background:#fff;border-color:#ddd;box-shadow:none} h1{-webkit-text-fill-color:#111;color:#111}.meta{color:#555} pre{background:#f6f7f8;color:#111;border-color:#ddd} code{color:#056; background:#eef7f9} }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">Patch Review · Export</div>
+    <h1>{{ scan.name }}</h1>
+    <div class="meta">Создано: {{ scan.created_at|date:'d.m.Y H:i' }}{% if scan.created_by %} · автор: {{ scan.created_by.username }}{% endif %} · Принятых правок: {{ proposals|length }}</div>
+  </header>
+
+  {% for p in proposals %}
+  <article>
+    <h2>{{ p.title }}</h2>
+    <div class="meta"><code>{{ p.method|upper }}</code> <code>{{ p.path }}</code> · {{ p.proposal_type }} · Источник: {{ p.source_of_truth }} · Уверенность: <span class="badge {{ p.confidence }}">{{ p.confidence }}</span>{% if p.reviewed_by %} · Рассмотрено: {{ p.reviewed_by.username }}{% if p.reviewed_at %} {{ p.reviewed_at|date:'d.m.Y H:i' }}{% endif %}{% endif %}</div>
+    <p>{{ p.reason }}</p>
+    <div class="row">
+      <div><h3>До</h3><pre>{{ p.before_text }}</pre></div>
+      <div><h3>После</h3><pre>{{ p.after_text }}</pre></div>
+    </div>
+  </article>
+  {% empty %}
+    <article class="meta">Нет принятых правок.</article>
+  {% endfor %}
+</main>
+</body>
+</html>

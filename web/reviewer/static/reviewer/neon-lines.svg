@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <filter id="g" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <linearGradient id="c1" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#72e5ff"/><stop offset=".5" stop-color="#9b7cff"/><stop offset="1" stop-color="#f08bdb"/></linearGradient>
+    <linearGradient id="c2" x1="1" y1="0" x2="0" y2="1"><stop stop-color="#f6c46a"/><stop offset=".45" stop-color="#72e5ff"/><stop offset="1" stop-color="#b16cff"/></linearGradient>
+  </defs>
+  <g fill="none" stroke-linecap="round" filter="url(#g)">
+    <path d="M-120 90 C 120 20, 170 290, 380 190 S 650 60, 780 260" stroke="url(#c1)" stroke-width="3" opacity=".62"/>
+    <path d="M-90 180 C 130 80, 180 360, 420 270 S 690 140, 860 320" stroke="#72e5ff" stroke-width="1.7" opacity=".42"/>
+    <path d="M1680 -80 C 1460 100, 1680 260, 1480 400 S 1320 620, 1580 720 S 1880 770, 2010 590" stroke="url(#c2)" stroke-width="3" opacity=".55"/>
+    <path d="M1750 -30 C 1530 120, 1740 300, 1540 430 S 1390 650, 1630 760 S 1900 820, 2040 650" stroke="#f08bdb" stroke-width="1.5" opacity=".35"/>
+    <path d="M-160 930 C 120 730, 320 1040, 590 865 S 990 790, 1160 1020" stroke="url(#c1)" stroke-width="3.2" opacity=".58"/>
+    <path d="M760 1160 C 950 940, 1180 1100, 1370 910 S 1700 730, 2050 950" stroke="url(#c2)" stroke-width="2.4" opacity=".5"/>
+    <path d="M-80 1020 C 170 840, 370 1120, 640 940" stroke="#f08bdb" stroke-width="1.6" opacity=".38"/>
+  </g>
+</svg>

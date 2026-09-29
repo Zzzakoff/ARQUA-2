@@ -1,0 +1,125 @@
+{% extends 'reviewer/base.html' %}
+{% block title %}Patch Review — OpenAPI review{% endblock %}
+
+{% block content %}
+<section class="hero-panel fade-up mb-4">
+  <div class="eyebrow">OpenAPI Review</div>
+  <h1 class="display-title"><span class="gradient-text">Проверка OpenAPI-спецификаций</span></h1>
+  <p class="hero-copy mb-0">
+    Загрузите спецификацию OpenAPI 3.0/3.1, просматривайте предложения по изменениям и проводите ручное ревью перед экспортом результата.
+  </p>
+  <div class="hero-stats">
+    <span class="mini-stat"><i class="bi bi-filetype-yml"></i> YAML / JSON</span>
+    <span class="mini-stat"><i class="bi bi-shield-check"></i> Сохранение ручной аналитики</span>
+    <span class="mini-stat"><i class="bi bi-code-slash"></i> JSON / Markdown / HTML / Patch</span>
+  </div>
+</section>
+
+<div class="row g-4 align-items-stretch mb-5">
+  <div class="col-lg-8">
+    <section class="card upload-card h-100 fade-up">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+          <div>
+            <div class="eyebrow mb-1">Новый скан</div>
+            <h2 class="h4 section-title mb-1">Загрузить спецификацию</h2>
+            <div class="section-caption">Поддерживаются файлы .yaml, .yml и .json размером до 5 МБ.</div>
+          </div>
+          <span class="brand-mark"><i class="bi bi-file-earmark-code"></i></span>
+        </div>
+
+        {% if form.errors %}
+          <div class="alert alert-danger">
+            <b>Не удалось загрузить файл.</b>
+            <ul class="mb-0 mt-1">
+              {% for field, errors in form.errors.items %}
+                {% for err in errors %}<li>{{ err }}</li>{% endfor %}
+              {% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+
+        <form method="post" enctype="multipart/form-data" novalidate>
+          {% csrf_token %}
+          <div class="mb-3">
+            <label class="form-label">{{ form.name.label }}</label>
+            {{ form.name }}
+            <div class="form-text">Если оставить поле пустым, будет использовано имя файла.</div>
+          </div>
+
+          <label class="form-label">{{ form.specification.label }}</label>
+          <div class="upload-zone" data-upload-zone>
+            <div>
+              <div class="upload-icon mx-auto"><i class="bi bi-cloud-arrow-up"></i></div>
+              <strong>Перетащите OpenAPI-файл сюда</strong><br>
+              <span>или нажмите, чтобы выбрать файл</span>
+              <div class="file-name" data-file-name>YAML / YML / JSON · до 5 МБ</div>
+            </div>
+            {{ form.specification }}
+          </div>
+
+          <button class="btn btn-primary mt-3 px-4">
+            <i class="bi bi-play-fill me-1"></i> Создать скан
+          </button>
+        </form>
+      </div>
+    </section>
+  </div>
+
+  <div class="col-lg-4">
+    <section class="card h-100 fade-up">
+      <div class="card-body d-flex flex-column">
+        <div class="eyebrow mb-1">Процесс</div>
+        <h2 class="h4 section-title mb-3">Работа с результатами</h2>
+        <div class="d-grid gap-3">
+          <div class="d-flex gap-3">
+            <span class="brand-mark flex-shrink-0"><i class="bi bi-upload"></i></span>
+            <div><strong>Загрузка</strong><div class="section-caption">Спецификация сохраняется как отдельный скан.</div></div>
+          </div>
+          <div class="d-flex gap-3">
+            <span class="brand-mark flex-shrink-0"><i class="bi bi-card-checklist"></i></span>
+            <div><strong>Предложения</strong><div class="section-caption">Для скана отображаются предложенные изменения.</div></div>
+          </div>
+          <div class="d-flex gap-3">
+            <span class="brand-mark flex-shrink-0"><i class="bi bi-person-check"></i></span>
+            <div><strong>Ревью</strong><div class="section-caption">Ревьюер принимает, отклоняет или редактирует правки.</div></div>
+          </div>
+          <div class="d-flex gap-3">
+            <span class="brand-mark flex-shrink-0"><i class="bi bi-download"></i></span>
+            <div><strong>Экспорт</strong><div class="section-caption">Принятые изменения выгружаются в требуемом формате.</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<section class="fade-up">
+  <div class="d-flex justify-content-between align-items-end gap-3 mb-3">
+    <div>
+      <div class="eyebrow mb-1">История</div>
+      <h2 class="h4 section-title mb-0">Последние сканы</h2>
+    </div>
+    <span class="section-caption">{{ scans|length }} в списке</span>
+  </div>
+
+  <div class="scan-grid">
+    {% for scan in scans %}
+      <a href="{% url 'scan_detail' scan.id %}" class="scan-item">
+        <div class="d-flex justify-content-between gap-3 align-items-start">
+          <div>
+            <div class="scan-item-title">{{ scan.name }}</div>
+            <div class="scan-meta mt-2"><i class="bi bi-clock me-1"></i>{{ scan.created_at|date:'d.m.Y H:i' }}</div>
+            <div class="scan-meta"><i class="bi bi-layers me-1"></i>{{ scan.proposals.count }} proposals{% if scan.created_by %} · {{ scan.created_by.username }}{% endif %}</div>
+          </div>
+          <span class="scan-arrow"><i class="bi bi-arrow-up-right"></i></span>
+        </div>
+      </a>
+    {% empty %}
+      <div class="glass-card p-4 text-center" style="grid-column: 1/-1; color: var(--muted);">
+        <i class="bi bi-inbox fs-3 d-block mb-2"></i>Пока нет сканов. Загрузите первую спецификацию выше.
+      </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

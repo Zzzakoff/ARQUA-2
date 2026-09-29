@@ -1,0 +1,38 @@
+{% extends 'reviewer/base.html' %}
+{% block title %}Редактирование — Patch Review{% endblock %}
+
+{% block content %}
+<div class="fade-up">
+  <a href="{% url 'scan_detail' proposal.scan_id %}" class="breadcrumb-back"><i class="bi bi-arrow-left me-1"></i>Вернуться к скану</a>
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mt-2 mb-4">
+    <div>
+      <div class="eyebrow mb-1">Proposal editor</div>
+      <h1 class="header-title gradient-text mb-2">Редактирование правки</h1>
+      <p class="section-caption mb-0">Измени итоговый вариант OpenAPI перед ручным подтверждением.</p>
+    </div>
+    <span class="brand-mark"><i class="bi bi-pencil-square"></i></span>
+  </div>
+
+  <section class="card">
+    <div class="card-body">
+      <h2 class="h5 section-title mb-2">{{ proposal.title }}</h2>
+      <div class="editor-meta">
+        <span class="http-method {% if proposal.method == 'get' %}http-get{% elif proposal.method == 'post' %}http-post{% elif proposal.method == 'put' %}http-put{% elif proposal.method == 'delete' %}http-delete{% else %}http-patch{% endif %}">{{ proposal.method|upper }}</span>
+        <span class="path-code">{{ proposal.path }}</span>
+        <span class="status-badge status-pending">{{ proposal.proposal_type }}</span>
+        <span class="status-badge status-edited">source: {{ proposal.source_of_truth }}</span>
+      </div>
+
+      <form method="post">
+        {% csrf_token %}
+        <label class="form-label">Итоговая OpenAPI после правки</label>
+        <textarea class="form-control editor-shell" name="after_text" rows="28">{{ proposal.after_text }}</textarea>
+        <div class="d-flex gap-2 flex-wrap mt-3">
+          <button class="btn btn-primary px-4"><i class="bi bi-save2 me-1"></i>Сохранить изменения</button>
+          <a class="btn btn-outline-light" href="{% url 'scan_detail' proposal.scan_id %}">Отмена</a>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+{% endblock %}
