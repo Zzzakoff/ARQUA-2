@@ -8,6 +8,5 @@ build/
 .venv/
 patches/
 test/
-tests/
 .env
 .pypirc

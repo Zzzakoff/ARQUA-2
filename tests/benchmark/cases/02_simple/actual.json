@@ -1,0 +1,116 @@
+{
+  "run_id": "889b79e5",
+  "timestamp": "2026-09-29T04:02:44.624992+00:00",
+  "spec_path": "D:\\api-drift-agent\\tests\\fixtures\\specs\\simple.yaml",
+  "src_path": "D:\\api-drift-agent\\tests\\fixtures\\apps\\simple_app",
+  "spec_endpoints": 3,
+  "code_endpoints": 2,
+  "items": [
+    {
+      "id": "bba82743dd08",
+      "endpoint": "GET /users",
+      "category": "missing_endpoint",
+      "location": "endpoint",
+      "detail": "Endpoint declared in spec but missing in code",
+      "spec_evidence": "GET /users",
+      "code_evidence": null,
+      "severity": "error"
+    },
+    {
+      "id": "cff0669ed44e",
+      "endpoint": "GET /users/{user_id}",
+      "category": "parameter_drift",
+      "location": "parameters.X-Trace-Id",
+      "detail": "Parameter 'X-Trace-Id' is present in code but missing in spec",
+      "spec_evidence": null,
+      "code_evidence": "header parameter",
+      "severity": "warning"
+    },
+    {
+      "id": "fadec000445e",
+      "endpoint": "GET /users/{user_id}",
+      "category": "parameter_drift",
+      "location": "parameters.include_meta",
+      "detail": "Parameter 'include_meta' is present in code but missing in spec",
+      "spec_evidence": null,
+      "code_evidence": "query parameter",
+      "severity": "warning"
+    },
+    {
+      "id": "bf62a294eea1",
+      "endpoint": "GET /users/{user_id}",
+      "category": "additive_drift",
+      "location": "response.200.schema.email",
+      "detail": "Field 'email' is returned by code but missing in spec",
+      "spec_evidence": null,
+      "code_evidence": "string/email",
+      "severity": "warning"
+    },
+    {
+      "id": "46c95f9364bb",
+      "endpoint": "GET /users/{user_id}",
+      "category": "additive_drift",
+      "location": "response.200.schema.name",
+      "detail": "Field 'name' is returned by code but missing in spec",
+      "spec_evidence": null,
+      "code_evidence": "string",
+      "severity": "warning"
+    },
+    {
+      "id": "018af0230b20",
+      "endpoint": "GET /users/{user_id}",
+      "category": "required_drift",
+      "location": "response.200.schema.created_at",
+      "detail": "Required flag differs for field 'created_at'",
+      "spec_evidence": "False",
+      "code_evidence": "True",
+      "severity": "warning"
+    },
+    {
+      "id": "94443a11c69c",
+      "endpoint": "POST /users",
+      "category": "additive_drift",
+      "location": "request_body.schema.nickname",
+      "detail": "Field 'nickname' is returned by code but missing in spec",
+      "spec_evidence": null,
+      "code_evidence": "unknown",
+      "severity": "warning"
+    },
+    {
+      "id": "fbeb55eae5fb",
+      "endpoint": "POST /users",
+      "category": "required_drift",
+      "location": "request_body.schema.email",
+      "detail": "Required flag differs for field 'email'",
+      "spec_evidence": "False",
+      "code_evidence": "True",
+      "severity": "warning"
+    },
+    {
+      "id": "6624868008a0",
+      "endpoint": "POST /users",
+      "category": "additive_drift",
+      "location": "response.201.schema.created_at",
+      "detail": "Field 'created_at' is returned by code but missing in spec",
+      "spec_evidence": null,
+      "code_evidence": "string/date-time",
+      "severity": "warning"
+    },
+    {
+      "id": "5dbfb38bae28",
+      "endpoint": "POST /users",
+      "category": "additive_drift",
+      "location": "response.201.schema.email",
+      "detail": "Field 'email' is returned by code but missing in spec",
+      "spec_evidence": null,
+      "code_evidence": "string/email",
+      "severity": "warning"
+    }
+  ],
+  "summary": {
+    "error": 1,
+    "warning": 9,
+    "info": 0,
+    "total": 10
+  }
+}

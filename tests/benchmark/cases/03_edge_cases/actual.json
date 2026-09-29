@@ -1,0 +1,66 @@
+{
+  "run_id": "cb65d3ff",
+  "timestamp": "2026-09-29T04:03:46.429127+00:00",
+  "spec_path": "D:\\api-drift-agent\\tests\\benchmark\\cases\\03_edge_cases\\spec.yaml",
+  "src_path": "D:\\api-drift-agent\\tests\\benchmark\\cases\\03_edge_cases\\app",
+  "spec_endpoints": 3,
+  "code_endpoints": 3,
+  "items": [
+    {
+      "id": "999b027ad99c",
+      "endpoint": "GET /legacy",
+      "category": "missing_endpoint",
+      "location": "endpoint",
+      "detail": "Endpoint declared in spec but missing in code",
+      "spec_evidence": "GET /legacy",
+      "code_evidence": null,
+      "severity": "error"
+    },
+    {
+      "id": "55ad94181d75",
+      "endpoint": "GET /extra",
+      "category": "ghost_endpoint",
+      "location": "endpoint",
+      "detail": "Endpoint exists in code but is missing from spec",
+      "spec_evidence": null,
+      "code_evidence": "GET /extra",
+      "severity": "warning"
+    },
+    {
+      "id": "a60b91527387",
+      "endpoint": "GET /items",
+      "category": "destructive_drift",
+      "location": "response.200.schema",
+      "detail": "Spec defines a schema but code does not",
+      "spec_evidence": "array",
+      "code_evidence": null,
+      "severity": "error"
+    },
+    {
+      "id": "73c415c03cca",
+      "endpoint": "GET /typed",
+      "category": "required_drift",
+      "location": "response.200.schema.count",
+      "detail": "Required flag differs for field 'count'",
+      "spec_evidence": "True",
+      "code_evidence": "False",
+      "severity": "warning"
+    },
+    {
+      "id": "0cbddc59e2bc",
+      "endpoint": "GET /typed",
+      "category": "type_drift",
+      "location": "response.200.schema.count",
+      "detail": "Type mismatch: spec=integer, code=unknown",
+      "spec_evidence": "integer",
+      "code_evidence": "unknown",
+      "severity": "error"
+    }
+  ],
+  "summary": {
+    "error": 3,
+    "warning": 2,
+    "info": 0,
+    "total": 5
+  }
+}
