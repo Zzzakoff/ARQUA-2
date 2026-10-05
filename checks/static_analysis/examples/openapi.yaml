@@ -1,0 +1,43 @@
+openapi: 3.1.0
+info:
+  title: Static analysis demonstration
+  version: '1'
+paths:
+  /users/{user_id}:
+    get:
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: search
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id]
+                properties:
+                  id:
+                    type: integer
+                  nickname:
+                    type: string
+  /external:
+    get:
+      responses:
+        '200':
+          description: External user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer

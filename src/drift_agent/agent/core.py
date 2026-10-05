@@ -103,6 +103,8 @@ class DriftAgent:
             raise OllamaConnectionError("Could not connect to Ollama. Ensure it is running locally.") from exc
 
     def _analyze_item(self, drift_item: DriftItem) -> AgentFinding:
+        if drift_item.requires_review or drift_item.category == DriftCategory.ANALYSIS_LIMITATION:
+            return self._ambiguous_finding(drift_item, [], drift_item.detail)
         fast_path = self._fast_path(drift_item)
         if fast_path is not None:
             return fast_path

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Static analysis finding 1.1",
+  "type": "object",
+  "required": ["id", "endpoint", "category", "location", "detail", "spec_evidence", "code_evidence", "severity", "schema_version", "source_kind", "source_file", "source_line", "requires_review"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^[0-9a-f]{12}$"},
+    "endpoint": {"type": "string"},
+    "category": {"enum": ["missing_endpoint", "ghost_endpoint", "additive_drift", "destructive_drift", "type_drift", "nullability_drift", "required_drift", "status_code_drift", "parameter_drift", "analysis_limitation"]},
+    "location": {"type": "string"},
+    "detail": {"type": "string"},
+    "spec_evidence": {"type": ["string", "null"]},
+    "code_evidence": {"type": ["string", "null"]},
+    "severity": {"enum": ["error", "warning", "info"]},
+    "schema_version": {"const": "1.1"},
+    "source_kind": {"const": "static"},
+    "source_file": {"type": ["string", "null"]},
+    "source_line": {"type": ["integer", "null"], "minimum": 1},
+    "requires_review": {"type": "boolean"}
+  },
+  "allOf": [{
+    "if": {"properties": {"category": {"const": "analysis_limitation"}}},
+    "then": {"properties": {"requires_review": {"const": true}, "severity": {"const": "info"}}}
+  }],
+  "additionalProperties": true
+}

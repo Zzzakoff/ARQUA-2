@@ -6,29 +6,58 @@ from drift_agent.types import DriftCategory, DriftItem, EndpointContract, FieldS
 
 def compute_drift(spec_contract: NormalizedContract, code_contract: NormalizedContract) -> list[DriftItem]:
     drift_items: list[DriftItem] = []
+    diagnostics = code_contract.metadata.get("diagnostics", [])
+    incomplete_routes = any(item.get("scope") == "routes" for item in diagnostics)
+    for diagnostic in diagnostics:
+        item = _limitation("*", f"source.{diagnostic.get('source_file')}:{diagnostic.get('source_line')}", diagnostic["message"])
+        item.source_file = diagnostic.get("source_file")
+        item.source_line = diagnostic.get("source_line")
+        drift_items.append(item)
     spec_endpoints = set(spec_contract.endpoints)
     code_endpoints = set(code_contract.endpoints)
     for endpoint in sorted(spec_endpoints - code_endpoints):
-        drift_items.append(_build_item(endpoint, DriftCategory.MISSING_ENDPOINT, "endpoint", "Endpoint declared in spec but missing in code", endpoint, None, "error"))
+        if incomplete_routes:
+            drift_items.append(_limitation(endpoint, "endpoint", "Endpoint was not found, but route analysis is incomplete; absence is not confirmed"))
+        else:
+            drift_items.append(_build_item(endpoint, DriftCategory.MISSING_ENDPOINT, "endpoint", "Endpoint declared in spec but missing in code", endpoint, None, "error"))
     for endpoint in sorted(code_endpoints - spec_endpoints):
-        drift_items.append(_build_item(endpoint, DriftCategory.GHOST_ENDPOINT, "endpoint", "Endpoint exists in code but is missing from spec", None, endpoint, "warning"))
+        if incomplete_routes:
+            drift_items.append(_limitation(endpoint, "endpoint", "Route registration is incomplete; the effective path requires review"))
+        else:
+            drift_items.append(_build_item(endpoint, DriftCategory.GHOST_ENDPOINT, "endpoint", "Endpoint exists in code but is missing from spec", None, endpoint, "warning"))
     for endpoint in sorted(spec_endpoints & code_endpoints):
         drift_items.extend(_compare_endpoint(endpoint, spec_contract.endpoints[endpoint], code_contract.endpoints[endpoint]))
+    for item in drift_items:
+        code_endpoint = code_contract.endpoints.get(item.endpoint)
+        if code_endpoint is not None:
+            item.source_file = code_endpoint.source_file
+            item.source_line = code_endpoint.source_line
+    # Multiple diagnostics at a source line can have different messages.
+    seen: set[str] = set()
+    for item in drift_items:
+        if item.id in seen:
+            item.id = make_drift_id(item.endpoint, f"{item.location}|{item.detail}", item.category)
+        seen.add(item.id)
     return drift_items
 
 
 def _compare_endpoint(endpoint: str, spec_endpoint: EndpointContract, code_endpoint: EndpointContract) -> list[DriftItem]:
     items: list[DriftItem] = []
-    items.extend(_compare_parameters(endpoint, spec_endpoint, code_endpoint))
-    items.extend(_compare_request_bodies(endpoint, spec_endpoint, code_endpoint))
-    items.extend(_compare_responses(endpoint, spec_endpoint, code_endpoint))
+    for scope, compare in (("parameters", _compare_parameters), ("request_body", _compare_request_bodies), ("responses", _compare_responses)):
+        note = code_endpoint.analysis_notes.get(scope)
+        if note:
+            items.append(_limitation(endpoint, scope, note))
+        else:
+            items.extend(compare(endpoint, spec_endpoint, code_endpoint))
     return items
 
 
 def _compare_parameters(endpoint: str, spec_endpoint: EndpointContract, code_endpoint: EndpointContract) -> list[DriftItem]:
     items: list[DriftItem] = []
-    spec_params = {(param.name, param.location): param for param in spec_endpoint.parameters}
-    code_params = {(param.name, param.location): param for param in code_endpoint.parameters}
+    def parameter_key(param):
+        return (param.name.lower() if param.location == "header" else param.name, param.location)
+    spec_params = {parameter_key(param): param for param in spec_endpoint.parameters}
+    code_params = {parameter_key(param): param for param in code_endpoint.parameters}
     for key in sorted(spec_params.keys() - code_params.keys()):
         items.append(
             _build_item(
@@ -54,6 +83,8 @@ def _compare_parameters(endpoint: str, spec_endpoint: EndpointContract, code_end
             )
         )
     for key in sorted(spec_params.keys() & code_params.keys()):
+        if spec_params[key].required != code_params[key].required:
+            items.append(_build_item(endpoint, DriftCategory.REQUIRED_DRIFT, f"parameters.{key[0]}.required", "Parameter required flag differs", str(spec_params[key].required), str(code_params[key].required), "warning"))
         items.extend(
             _compare_schemas(
                 endpoint,
@@ -72,6 +103,8 @@ def _compare_request_bodies(endpoint: str, spec_endpoint: EndpointContract, code
         return [_build_item(endpoint, DriftCategory.ADDITIVE_DRIFT, "request_body", "Code accepts a request body that spec does not define", None, "request body", "warning")]
     if spec_endpoint.request_body and code_endpoint.request_body:
         items = _compare_schemas(endpoint, "request_body.schema", spec_endpoint.request_body.schema, code_endpoint.request_body.schema)
+        if spec_endpoint.request_body.required != code_endpoint.request_body.required:
+            items.append(_build_item(endpoint, DriftCategory.REQUIRED_DRIFT, "request_body.required", "Request body required flag differs", str(spec_endpoint.request_body.required), str(code_endpoint.request_body.required), "warning"))
         if spec_endpoint.request_body.content_type != code_endpoint.request_body.content_type:
             items.append(
                 _build_item(
@@ -116,6 +149,9 @@ def _compare_responses(endpoint: str, spec_endpoint: EndpointContract, code_endp
 
 def _compare_schemas(endpoint: str, location: str, spec_schema: FieldSchema | None, code_schema: FieldSchema | None) -> list[DriftItem]:
     items: list[DriftItem] = []
+    notes = [schema.analysis_note or "Schema type is unknown" for schema in (spec_schema, code_schema) if schema is not None and (schema.analysis_note or schema.type == "unknown")]
+    if notes:
+        return [_limitation(endpoint, location, "; ".join(dict.fromkeys(notes)))]
     if spec_schema is None and code_schema is None:
         return items
     if spec_schema is not None and code_schema is None:
@@ -155,6 +191,12 @@ def _schema_summary(schema: FieldSchema) -> str:
     if schema.format:
         summary = f"{summary}/{schema.format}"
     return summary
+
+
+def _limitation(endpoint: str, location: str, reason: str) -> DriftItem:
+    item = _build_item(endpoint, DriftCategory.ANALYSIS_LIMITATION, location, reason, None, None, "info")
+    item.requires_review = True
+    return item
 
 
 def _build_item(

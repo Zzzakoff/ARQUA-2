@@ -16,6 +16,7 @@ class FieldSchema:
     properties: Optional[Dict[str, "FieldSchema"]] = None
     enum: Optional[List[Any]] = None
     description: Optional[str] = None
+    analysis_note: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -62,6 +63,7 @@ class EndpointContract:
     tags: List[str] = field(default_factory=list)
     source_file: Optional[str] = None
     source_line: Optional[int] = None
+    analysis_notes: Dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -87,6 +89,7 @@ class DriftCategory(Enum):
     REQUIRED_DRIFT = "required_drift"
     STATUS_CODE_DRIFT = "status_code_drift"
     PARAMETER_DRIFT = "parameter_drift"
+    ANALYSIS_LIMITATION = "analysis_limitation"
 
 
 @dataclass
@@ -99,6 +102,11 @@ class DriftItem:
     spec_evidence: Optional[str]
     code_evidence: Optional[str]
     severity: Literal["error", "warning", "info"]
+    schema_version: str = "1.1"
+    source_kind: str = "static"
+    source_file: Optional[str] = None
+    source_line: Optional[int] = None
+    requires_review: bool = False
 
     def to_dict(self) -> Dict[str, Any]:
         payload = asdict(self)

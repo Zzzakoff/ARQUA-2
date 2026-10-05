@@ -85,7 +85,7 @@ def _extract_endpoints(document: dict[str, Any]) -> dict[str, EndpointContract]:
             continue
         shared_parameters = path_item.get("parameters", [])
         for method, operation in path_item.items():
-            if method.lower() not in {"get", "post", "put", "patch", "delete", "head", "options"}:
+            if method.lower() not in {"get", "post", "put", "patch", "delete", "head", "options", "trace"}:
                 continue
             if not isinstance(operation, dict):
                 continue
@@ -173,9 +173,13 @@ def _normalize_schema(schema: dict[str, Any] | None, name: str, required: bool) 
         schema = _flatten_union(schema)
     schema_type = _determine_type(schema)
     nullable = bool(schema.get("nullable", False))
+    analysis_note = schema.get("_analysis_note")
     if isinstance(schema.get("type"), list):
         nullable = "null" in schema["type"]
-        schema_type = next((item for item in schema["type"] if item != "null"), "unknown")
+        non_null_types = set(schema["type"]) - {"null"}
+        schema_type = next(iter(non_null_types)) if len(non_null_types) == 1 else "null" if not non_null_types else "unknown"
+        if len(non_null_types) > 1:
+            analysis_note = "Multiple OpenAPI schema types require manual review"
     field = FieldSchema(
         name=name,
         type=CANONICAL_TYPE_MAP.get(schema_type, schema_type or "unknown"),
@@ -184,6 +188,7 @@ def _normalize_schema(schema: dict[str, Any] | None, name: str, required: bool) 
         nullable=nullable,
         enum=list(schema.get("enum")) if isinstance(schema.get("enum"), list) else None,
         description=schema.get("description"),
+        analysis_note=analysis_note,
     )
     if field.type == "array":
         field.items = _normalize_schema(schema.get("items") or {}, name=f"{name}[]", required=True)
@@ -206,11 +211,14 @@ def _flatten_allof(schema: dict[str, Any]) -> dict[str, Any]:
     merged: dict[str, Any] = {"type": "object", "properties": {}, "required": []}
     for subschema in schema.get("allOf", []):
         candidate = _flatten_union(_flatten_allof(subschema) if "allOf" in subschema else subschema)
+        if candidate.get("type", "object") != "object":
+            return {"type": "unknown", "_analysis_note": "Non-object allOf requires manual review"}
         for key, value in candidate.items():
             if key == "properties":
                 for prop_name, prop_value in value.items():
                     if prop_name in merged["properties"] and merged["properties"][prop_name] != prop_value:
                         LOGGER.warning("allOf conflict on property '%s'; first definition wins", prop_name)
+                        merged["_analysis_note"] = f"Conflicting allOf definitions for {prop_name}"
                         continue
                     merged["properties"][prop_name] = prop_value
             elif key == "required":
@@ -222,20 +230,23 @@ def _flatten_allof(schema: dict[str, Any]) -> dict[str, Any]:
 
 def _flatten_union(schema: dict[str, Any]) -> dict[str, Any]:
     variants = schema.get("anyOf") or schema.get("oneOf") or []
+    if not variants:
+        return schema
     normalized: list[dict[str, Any]] = []
     for variant in variants:
         candidate = _flatten_allof(variant) if "allOf" in variant else variant
         normalized.append(candidate)
     non_null_types = {_determine_type(item) for item in normalized if _determine_type(item) != "null"}
     has_null = any(_determine_type(item) == "null" for item in normalized)
-    if len(non_null_types) == 1:
+    non_null_variants = [item for item in normalized if _determine_type(item) != "null"]
+    if len(non_null_types) == 1 and len(non_null_variants) == 1:
         base = next(item for item in normalized if _determine_type(item) != "null")
         base = dict(base)
         if has_null:
             base["nullable"] = True
         return base
     LOGGER.warning("Unresolvable anyOf/oneOf encountered")
-    return {"type": "object", "description": "[anyOf/oneOf: unresolvable]"}
+    return {"type": "unknown", "_analysis_note": "Multiple anyOf/oneOf variants require manual review"}
 
 
 def _determine_type(schema: dict[str, Any]) -> str:
