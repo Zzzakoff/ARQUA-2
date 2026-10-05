@@ -10,3 +10,6 @@ patches/
 test/
 .env
 .pypirc
+tests/benchmark/report.json
+tests/benchmark/report.pdf
+tests/benchmark/cases/*/actual.json
