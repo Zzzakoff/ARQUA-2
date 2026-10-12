@@ -1,0 +1,203 @@
+openapi: "3.0.3"
+info:
+  title: Drift Lab API
+  version: "1.0.0"
+paths:
+  /api/users/{user_id}:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      tags: [users]
+      parameters:
+        - name: include_meta
+          in: query
+          schema:
+            type: boolean
+        - name: X-Trace-Id
+          in: header
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, name, email, created_at, role, legacy_code]
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  email:
+                    type: string
+                    format: email
+                  created_at:
+                    type: string
+                    format: date-time
+                  role:
+                    type: string
+                    enum: [admin, member, owner]
+                  legacy_code:
+                    type: string
+  /api/users:
+    post:
+      tags: [users]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email, inviteCode]
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                nickname:
+                  type: string
+                  nullable: true
+                role:
+                  type: string
+                  enum: [admin, member, owner]
+                inviteCode:
+                  type: string
+      responses:
+        "200":
+          description: Created user
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, name, email, created_at, role]
+                properties:
+                  id:
+                    type: string
+                    format: uuid
+                  name:
+                    type: string
+                  email:
+                    type: string
+                    format: email
+                  created_at:
+                    type: string
+                    format: date-time
+                  role:
+                    type: string
+                    enum: [admin, member]
+  /api/orders:
+    get:
+      tags: [orders]
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, status, created_at, total]
+                  properties:
+                    id:
+                      type: integer
+                    status:
+                      type: string
+                      enum: [pending, paid]
+                    created_at:
+                      type: string
+                      format: date-time
+                    total:
+                      type: number
+    post:
+      tags: [orders]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, items]
+              properties:
+                user_id:
+                  type: string
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required: [sku, quantity]
+                    properties:
+                      sku:
+                        type: string
+                      quantity:
+                        type: integer
+                priority:
+                  type: string
+                  enum: [standard, express, overnight]
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [id, status, created_at, total]
+                properties:
+                  id:
+                    type: integer
+                  status:
+                    type: string
+                    enum: [pending, paid, cancelled]
+                  created_at:
+                    type: string
+                    format: date-time
+                  total:
+                    type: number
+  /admin/audit:
+    get:
+      tags: [admin]
+      parameters:
+        - name: X-Admin-Token
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [id, action]
+                  properties:
+                    id:
+                      type: integer
+                    action:
+                      type: string
+  /reports/summary:
+    get:
+      tags: [reports]
+      responses:
+        "200":
+          description: Missing in code
