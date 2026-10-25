@@ -75,10 +75,9 @@ class DriftAgent:
         self.toolkit = toolkit
         self.model = model
         self.provider = provider
-        if provider == "groq":
-            if not groq_api_key:
-                raise AgentFailure("GROQ_KEY is required when explain provider is groq")
-            self.client = GroqChatClient(api_key=groq_api_key, base_url=groq_base_url)
+        if provider == "groq" or provider == "deepcode":
+            base = "https://deepcode.ci.nsu.ru/api/v1" if provider == "deepcode" else groq_base_url
+            self.client = GroqChatClient(api_key=groq_api_key, base_url=base)
         else:
             self.client = ollama.Client(host=ollama_host)
         self.langchain_tools = build_tools(toolkit, TOOLS)

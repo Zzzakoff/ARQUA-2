@@ -78,7 +78,11 @@ def run_drift_check(spec, src, output_file, explain=False):
         "--output-file", str(output_file),
     ]
     if explain:
-        args.append("--explain")
+        args.extend([
+            "--explain", 
+            "--explain-provider", "deepcode",
+            "--model", "qwen3.8-flash-next"
+    ])
 
     start = time.perf_counter()
     result = subprocess.run(args, capture_output=True, text=True)

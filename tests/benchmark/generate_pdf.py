@@ -1,10 +1,5 @@
 """
 Генерация PDF-отчёта по результатам бенчмарка.
-
-Читает report.json, подхватывает llm_findings.json и actual.json из кейсов.
-Описание расхождения: если есть перевод в REASONING_RU — русский, иначе английский.
-
-Запуск: python tests/benchmark/generate_pdf.py
 """
 import json
 from datetime import datetime
@@ -48,30 +43,6 @@ SOURCE_OF_TRUTH_RU = {
     "AMBIGUOUS": "AMBIGUOUS — неоднозначно",
 }
 
-# Переводы reasoning от LLM. Ключ — начало английского текста.
-REASONING_RU = {
-    "The endpoint is declared in":
-        "Эндпоинт объявлен в спецификации, но отсутствует в коде.",
-    "The endpoint GET /extra exist":
-        "Эндпоинт GET /extra есть в коде, но отсутствует в спецификации.",
-    "The spec defines a schema for":
-        "Спецификация описывает схему ответа, но в коде схема не объявлена.",
-    "The spec indicates that the '":
-        "Спецификация требует поле 'count', но в коде оно не обязательно.",
-    "The spec explicitly states th":
-        "Спецификация требует тип 'integer', а в коде тип неизвестен — расхождение.",
-}
-
-
-def ru_reasoning(text):
-    """Русский перевод, если есть в словаре. Иначе — оригинал."""
-    if not text:
-        return "—"
-    for prefix, ru in REASONING_RU.items():
-        if text.startswith(prefix):
-            return ru
-    return text
-
 
 def cell(text, bold=False, size=8, align="CENTER"):
     style = ParagraphStyle(
@@ -89,6 +60,61 @@ def category_cell(code):
     s2 = ParagraphStyle("c2", fontName=FONT_REGULAR, fontSize=7, leading=9,
                         alignment=1, textColor=colors.HexColor("#555555"))
     return [Paragraph(code, s1), Paragraph(ru, s2)]
+
+
+def humanize_location(loc):
+    """Превращает машинный location в читаемый русский."""
+    if not loc or loc == "endpoint":
+        return "эндпоинт целиком"
+    parts = loc.split(".")
+    if parts[0] == "response" and len(parts) >= 2:
+        code = parts[1]
+        tail = ".".join(parts[2:]) if len(parts) > 2 else ""
+        if tail.endswith("schema"):
+            tail = tail[:-7].rstrip(".") or "схема"
+        if tail:
+            return f"«{tail}» в ответе {code}"
+        return f"ответ {code}"
+    if parts[0] == "request_body":
+        tail = ".".join(parts[1:]) or "тело"
+        if tail.startswith("schema."):
+            tail = tail[7:]
+        return f"поле «{tail}» в теле запроса"
+    if parts[0] == "parameters" and len(parts) >= 2:
+        return f"параметр «{parts[1]}»"
+    return loc
+
+
+def ru_description(item):
+    """Собирает описание на русском из данных actual.json."""
+    cat = item.get("category", "")
+    endpoint = item.get("endpoint", "—")
+    loc = item.get("location", "")
+    spec_ev = item.get("spec_evidence")
+    code_ev = item.get("code_evidence")
+    place = humanize_location(loc)
+
+    if cat == "missing_endpoint":
+        return f"Эндпоинт {endpoint} объявлен в спецификации, но отсутствует в коде."
+    if cat == "ghost_endpoint":
+        return f"Эндпоинт {endpoint} есть в коде, но не описан в спецификации."
+    if cat == "additive_drift":
+        return f"В {place} код возвращает поле, которого нет в спецификации."
+    if cat == "destructive_drift":
+        return f"В {place} спецификация описывает поле, которого нет в коде."
+    if cat == "type_drift":
+        return f"В {place} тип не совпадает: спека — {spec_ev}, код — {code_ev}."
+    if cat == "nullability_drift":
+        return f"В {place} различается nullable: спека — {spec_ev}, код — {code_ev}."
+    if cat == "required_drift":
+        return f"В {place} различается обязательность: спека — {spec_ev}, код — {code_ev}."
+    if cat == "status_code_drift":
+        who = "спеке" if spec_ev else "коде"
+        return f"Код ответа {loc} присутствует только в {who}."
+    if cat == "parameter_drift":
+        who = "спеке" if spec_ev else "коде"
+        return f"В {place} параметр присутствует только в {who}."
+    return "—"
 
 
 def load_case_details(case_name):
@@ -166,12 +192,11 @@ def build_findings_table(items, llm_findings):
     rows = [[cell(h, bold=True, size=9) for h in header]]
     for item in items:
         llm = llm_by_id.get(item.get("id"), {})
-        reasoning = ru_reasoning(llm.get("reasoning", "—"))
         rows.append([
             cell(item.get("endpoint", "—"), size=8),
             category_cell(item.get("category", "—")),
             cell(item.get("location", "—"), size=8),
-            cell(reasoning, size=8, align="LEFT"),
+            cell(ru_description(item), size=8, align="LEFT"), # <--- ИСПОЛЬЗУЕМ НАШУ ФУНКЦИЮ
             cell(SOURCE_OF_TRUTH_RU.get(llm.get("source_of_truth"), "—"), size=8),
             cell(llm.get("confidence", "—"), size=8),
         ])
