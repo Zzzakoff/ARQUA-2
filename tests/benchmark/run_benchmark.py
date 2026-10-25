@@ -156,16 +156,28 @@ def run_case(case_dir, with_llm=False):
             print(f"    - {k}")
 
     # LLM-прогон (опционально)
+        # LLM-прогон (опционально)
     if with_llm:
         llm_file = case_dir / "llm_findings.json"
+        # ВСЕГДА удаляем старый файл перед новым прогоном!
+        if llm_file.exists():
+            llm_file.unlink()
+            
         print(f"  LLM-прогон (--explain)... это может занять время")
-        ok_llm, llm_elapsed, _, err_llm = run_drift_check(
-            spec, src, llm_file, explain=True
-        )
-        if ok_llm:
-            print(f"  LLM готово за {llm_elapsed:.2f}с → {llm_file.name}")
-        else:
-            print(f"  [!] LLM не удалось. stderr: {err_llm[-500:]}")
+        try:
+            ok_llm, llm_elapsed, _, err_llm = run_drift_check(
+                spec, src, llm_file, explain=True
+            )
+            if ok_llm:
+                print(f"  LLM готово за {llm_elapsed:.2f}с -> {llm_file.name}")
+            else:
+                print(f"  [!] LLM недоступна: {err_llm[-100:]}")
+                # Создаем пустую заглушку, чтобы PDF собрался
+                llm_file.write_text('{"findings": []}', encoding="utf-8")
+        except Exception as e:
+            print(f"  [!] Ошибка LLM: {e}")
+            # Создаем пустую заглушку, чтобы PDF собрался
+            llm_file.write_text('{"findings": []}', encoding="utf-8")
 
     return {
         "case": case_dir.name,

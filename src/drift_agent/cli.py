@@ -226,20 +226,16 @@ def _create_agent(
     groq_model: str,
     groq_key: str | None,
 ) -> DriftAgent:
-    if explain_provider == "deepcode":
-        dc_key = os.environ.get("DEEPCODE_KEY") # <--- Берем из env
-        if not dc_key:
-            raise typer.BadParameter("DEEPCODE_KEY is required")
-        return DriftAgent(toolkit=toolkit, model="qwen3.8-flash-next", provider="deepcode", groq_api_key=dc_key)
+    if explain_provider == "groq":
+        if not groq_key:
+            raise typer.BadParameter("GROQ_KEY or GROQ_API_KEY is required for --explain-provider groq")
+        return DriftAgent(toolkit=toolkit, model=groq_model, provider="groq", groq_api_key=groq_key)
     
     if explain_provider == "deepcode":
         dc_key = os.environ.get("DEEPCODE_KEY")
         if not dc_key:
             raise typer.BadParameter("DEEPCODE_KEY is required for --explain-provider deepcode")
-        # В core.py мы уже прописали base_url, так что просто передаём ключ
         return DriftAgent(toolkit=toolkit, model="qwen3.8-flash-next", provider="deepcode", groq_api_key=dc_key)
-    # ---------------------
-
     return DriftAgent(toolkit=toolkit, model=ollama_model)
 
 
