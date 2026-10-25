@@ -2,6 +2,7 @@
 Генерация PDF-отчёта по результатам бенчмарка.
 """
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -63,7 +64,6 @@ def category_cell(code):
 
 
 def humanize_location(loc):
-    """Превращает машинный location в читаемый русский."""
     if not loc or loc == "endpoint":
         return "эндпоинт целиком"
     parts = loc.split(".")
@@ -86,7 +86,6 @@ def humanize_location(loc):
 
 
 def ru_description(item):
-    """Собирает описание на русском из данных actual.json."""
     cat = item.get("category", "")
     endpoint = item.get("endpoint", "—")
     loc = item.get("location", "")
@@ -117,10 +116,59 @@ def ru_description(item):
     return "—"
 
 
+def build_evidence_text(item, src_dir):
+    """Собирает доказательства из спеки, кода и ищет файл/строку."""
+    spec_ev = item.get("spec_evidence")
+    code_ev = item.get("code_evidence")
+    
+    parts = []
+    if spec_ev:
+        parts.append(f"Спека: {spec_ev}")
+    if code_ev:
+        parts.append(f"Код: {code_ev}")
+        
+    # Поиск файла и строки
+    loc = item.get("location", "")
+    search_word = ""
+    if "." in loc:
+        search_word = loc.split(".")[-1].replace("[]", "")
+    
+    if search_word and src_dir.exists():
+        # Ищем по частям слова (например, X-Trace-Id -> x_trace_id)
+        search_parts = [p.lower() for p in re.split(r'[-_]', search_word) if len(p) > 2]
+        
+        found = False
+        for py_file in src_dir.rglob("*.py"):
+            if found: break
+            try:
+                lines = py_file.read_text(encoding="utf-8").splitlines()
+                for i, line in enumerate(lines, start=1):
+                    line_lower = line.lower()
+                    # Проверяем, что все части слова есть в строке
+                    if all(part in line_lower for part in search_parts):
+                        rel_path = py_file.relative_to(src_dir)
+                        parts.append(f"Строка: {rel_path}:{i}")
+                        found = True
+                        break
+            except Exception:
+                pass
+                
+    if not parts:
+        return "—"
+    return "\n".join(parts)
+
+
 def load_case_details(case_name):
     case_dir = CASES_DIR / case_name
     items = []
     llm_findings = []
+    
+    # Ищем папку с кодом
+    src_dir = case_dir / "app"
+    if not src_dir.exists():
+        src_dir = case_dir / "src"
+    if not src_dir.exists():
+        src_dir = None
 
     actual_file = case_dir / "actual.json"
     if actual_file.exists():
@@ -132,7 +180,7 @@ def load_case_details(case_name):
         llm = json.loads(llm_file.read_text(encoding="utf-8"))
         llm_findings = llm.get("findings") or llm.get("agent_findings") or []
 
-    return items, llm_findings
+    return items, llm_findings, src_dir
 
 
 def build_metrics_table(results):
@@ -186,21 +234,30 @@ def build_summary_table(results):
     return table
 
 
-def build_findings_table(items, llm_findings):
+def build_findings_table(items, llm_findings, src_dir):
     llm_by_id = {f.get("drift_item_id"): f for f in llm_findings}
-    header = ["Endpoint", "Категория", "Место", "Описание", "Источник истины", "Уверенность"]
+    header = ["Endpoint", "Категория", "Место", "Описание", "Доказательства (файл:строка)", "Источник", "Уверенность", "Ручной разбор"]
     rows = [[cell(h, bold=True, size=9) for h in header]]
+    
     for item in items:
         llm = llm_by_id.get(item.get("id"), {})
+        source = llm.get("source_of_truth")
+        
+        # Пункт 3: признак ручного разбора
+        manual = "Да" if source == "AMBIGUOUS" else "Нет"
+        
         rows.append([
             cell(item.get("endpoint", "—"), size=8),
             category_cell(item.get("category", "—")),
             cell(item.get("location", "—"), size=8),
-            cell(ru_description(item), size=8, align="LEFT"), # <--- ИСПОЛЬЗУЕМ НАШУ ФУНКЦИЮ
-            cell(SOURCE_OF_TRUTH_RU.get(llm.get("source_of_truth"), "—"), size=8),
+            cell(ru_description(item), size=8, align="LEFT"),
+            cell(build_evidence_text(item, src_dir), size=7, align="LEFT"), # Пункт 1: доказательства
+            cell(SOURCE_OF_TRUTH_RU.get(source, "—"), size=8),
             cell(llm.get("confidence", "—"), size=8),
+            cell(manual, size=8),
         ])
-    table = Table(rows, colWidths=[3.3*cm, 3.5*cm, 3.0*cm, 8.5*cm, 3.2*cm, 2.0*cm],
+        
+    table = Table(rows, colWidths=[2.8*cm, 2.8*cm, 2.2*cm, 4.8*cm, 5.0*cm, 2.2*cm, 1.5*cm, 1.5*cm],
                   hAlign="LEFT")
     table.setStyle(TableStyle([
         ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#34495E")),
@@ -224,7 +281,7 @@ def generate_pdf():
     doc = SimpleDocTemplate(
         str(REPORT_PDF),
         pagesize=landscape(A4),
-        leftMargin=1.5*cm, rightMargin=1.5*cm,
+        leftMargin=1.0*cm, rightMargin=1.0*cm,
         topMargin=1.5*cm, bottomMargin=1.5*cm,
     )
     styles = getSampleStyleSheet()
@@ -256,11 +313,13 @@ def generate_pdf():
     story.append(Spacer(1, 15))
 
     for r in results:
-        items, llm_findings = load_case_details(r["case"])
+        # Вот эта строчка должна возвращать ТРИ значения
+        items, llm_findings, src_dir = load_case_details(r["case"])
         if not items:
             continue
         story.append(Paragraph(f"Кейс: {r['case']}", h2))
-        story.append(build_findings_table(items, llm_findings))
+        # Передаем все три в таблицу
+        story.append(build_findings_table(items, llm_findings, src_dir))
         story.append(Spacer(1, 12))
 
     doc.build(story)
