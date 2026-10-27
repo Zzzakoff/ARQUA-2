@@ -17,6 +17,8 @@ class FieldSchema:
     enum: Optional[List[Any]] = None
     description: Optional[str] = None
     analysis_note: Optional[str] = None
+    examples: Optional[List[Any]] = None
+    documentation_notes: Dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -28,6 +30,9 @@ class ParameterSchema:
     location: Literal["path", "query", "header", "cookie"]
     required: bool
     schema: FieldSchema
+    description: Optional[str] = None
+    examples: Optional[List[Any]] = None
+    documentation_notes: Dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -38,6 +43,9 @@ class RequestBodySchema:
     required: bool
     content_type: str
     schema: FieldSchema
+    description: Optional[str] = None
+    examples: Optional[List[Any]] = None
+    documentation_notes: Dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -48,6 +56,9 @@ class ResponseSchema:
     status_code: str
     content_type: Optional[str]
     schema: Optional[FieldSchema]
+    description: Optional[str] = None
+    examples: Optional[List[Any]] = None
+    documentation_notes: Dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -64,6 +75,9 @@ class EndpointContract:
     source_file: Optional[str] = None
     source_line: Optional[int] = None
     analysis_notes: Dict[str, str] = field(default_factory=dict)
+    summary: Optional[str] = None
+    description: Optional[str] = None
+    documentation_notes: Dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -90,6 +104,23 @@ class DriftCategory(Enum):
     STATUS_CODE_DRIFT = "status_code_drift"
     PARAMETER_DRIFT = "parameter_drift"
     ANALYSIS_LIMITATION = "analysis_limitation"
+    DESCRIPTION_DRIFT = "description_drift"
+    EXAMPLE_DRIFT = "example_drift"
+
+
+class DriftTaxonomy(Enum):
+    MISSING_ENDPOINT = "missing_endpoint"
+    UNDOCUMENTED_ENDPOINT = "undocumented_endpoint"
+    PATH_PARAMETER = "path_parameter"
+    QUERY_PARAMETER = "query_parameter"
+    HEADER_PARAMETER = "header_parameter"
+    COOKIE_PARAMETER = "cookie_parameter"
+    SCHEMA = "schema"
+    REQUIRED_NULLABLE = "required_nullable"
+    RESPONSE_CODE = "response_code"
+    DESCRIPTION = "description"
+    EXAMPLE = "example"
+    ANALYSIS_LIMITATION = "analysis_limitation"
 
 
 @dataclass
@@ -107,10 +138,23 @@ class DriftItem:
     source_file: Optional[str] = None
     source_line: Optional[int] = None
     requires_review: bool = False
+    parameter_location: Optional[str] = None
+
+    @property
+    def taxonomy(self) -> DriftTaxonomy:
+        from drift_agent.diff_engine.classifier import classify_drift
+
+        return classify_drift(self.category, self.parameter_location)
+
+    @property
+    def priority(self) -> str:
+        return {"error": "P1", "warning": "P2", "info": "P3"}[self.severity]
 
     def to_dict(self) -> Dict[str, Any]:
         payload = asdict(self)
         payload["category"] = self.category.value
+        payload["taxonomy"] = self.taxonomy.value
+        payload["priority"] = self.priority
         return payload
 
 
@@ -136,7 +180,7 @@ class AgentFinding:
 
     def to_dict(self) -> Dict[str, Any]:
         payload = asdict(self)
-        payload["drift_item"]["category"] = self.drift_item.category.value
+        payload["drift_item"] = self.drift_item.to_dict()
         return payload
 
 

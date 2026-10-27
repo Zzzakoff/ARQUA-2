@@ -135,7 +135,7 @@ def test_async_routes_match_spec_without_false_missing_endpoints(tmp_path):
     contract = analyze(tmp_path, '''
         from fastapi import FastAPI
         app = FastAPI()
-        @app.api_route(path="/health", methods=["GET", "POST"], status_code=200)
+        @app.api_route(path="/health", methods=["GET", "POST"], status_code=200, response_description="OK")
         async def health() -> str:
             return "ok"
     ''')

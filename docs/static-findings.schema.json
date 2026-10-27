@@ -1,12 +1,15 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Static analysis finding 1.1",
+  "title": "Static analysis finding 1.1 with unified taxonomy",
   "type": "object",
-  "required": ["id", "endpoint", "category", "location", "detail", "spec_evidence", "code_evidence", "severity", "schema_version", "source_kind", "source_file", "source_line", "requires_review"],
+  "required": ["id", "endpoint", "category", "taxonomy", "priority", "parameter_location", "location", "detail", "spec_evidence", "code_evidence", "severity", "schema_version", "source_kind", "source_file", "source_line", "requires_review"],
   "properties": {
     "id": {"type": "string", "pattern": "^[0-9a-f]{12}$"},
     "endpoint": {"type": "string"},
-    "category": {"enum": ["missing_endpoint", "ghost_endpoint", "additive_drift", "destructive_drift", "type_drift", "nullability_drift", "required_drift", "status_code_drift", "parameter_drift", "analysis_limitation"]},
+    "category": {"enum": ["missing_endpoint", "ghost_endpoint", "additive_drift", "destructive_drift", "type_drift", "nullability_drift", "required_drift", "status_code_drift", "parameter_drift", "analysis_limitation", "description_drift", "example_drift"]},
+    "taxonomy": {"enum": ["missing_endpoint", "undocumented_endpoint", "path_parameter", "query_parameter", "header_parameter", "cookie_parameter", "schema", "required_nullable", "response_code", "description", "example", "analysis_limitation"]},
+    "priority": {"enum": ["P1", "P2", "P3"]},
+    "parameter_location": {"enum": ["path", "query", "header", "cookie", null]},
     "location": {"type": "string"},
     "detail": {"type": "string"},
     "spec_evidence": {"type": ["string", "null"]},

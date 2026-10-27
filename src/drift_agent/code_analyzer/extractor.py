@@ -9,6 +9,7 @@ from typing import Any
 
 from drift_agent.code_analyzer.resolver import ModelResolver, ModuleInfo
 from drift_agent.code_analyzer.syntax import is_required, keyword_value, unwrap_annotated
+from drift_agent.documentation import apply_documentation, documentation_from_call
 from drift_agent.types import EndpointContract, FieldSchema, ParameterSchema, RequestBodySchema, ResponseSchema
 
 LOGGER = logging.getLogger(__name__)
@@ -79,6 +80,9 @@ def extract_endpoints(
                             source_file=str(module_info.filepath.relative_to(project_root)),
                             source_line=decorator.lineno,
                             analysis_notes=notes,
+                            summary=route.get("summary"),
+                            description=route.get("description", ast.get_docstring(node)),
+                            documentation_notes=route.get("documentation_notes", {}),
                         )
                         endpoints[f"{method} {resolved_path}"] = endpoint
     return endpoints
@@ -171,6 +175,13 @@ def _extract_route_decorator(decorator: ast.AST) -> dict[str, Any] | None:
                 for elt in keyword.value.elts
                 if isinstance(elt, ast.Constant) and isinstance(elt.value, str)
             ]
+    route.update(documentation_from_call(decorator))
+    for key in ("summary", "response_description"):
+        value = keyword_value(decorator, key)
+        if isinstance(value, ast.Constant) and isinstance(value.value, str):
+            route[key] = value.value
+        elif value is not None:
+            route.setdefault("documentation_notes", {})[key] = f"Computed {key} could not be resolved statically"
     return route
 
 
@@ -199,6 +210,7 @@ def _extract_parameters(
         )
         effective_default = default if default is not None else marker_node
         marker = _default_marker(marker_node)
+        documentation = documentation_from_call(marker_node)
         alias_node = keyword_value(marker_node, "alias")
         alias = alias_node.value if isinstance(alias_node, ast.Constant) and isinstance(alias_node.value, str) else arg.arg
         if alias_node is not None and alias == arg.arg and not isinstance(alias_node, ast.Constant):
@@ -213,7 +225,7 @@ def _extract_parameters(
         if alias in path_params or marker == "Path":
             field, _ = model_resolver.resolve_annotation(module_info.module, annotation, alias)
             field.required = True
-            parameters.append(ParameterSchema(name=alias, location="path", required=True, schema=field))
+            parameters.append(ParameterSchema(name=alias, location="path", required=True, schema=field, **documentation))
             continue
         if marker == "Header":
             field, _ = model_resolver.resolve_annotation(module_info.module, annotation, alias)
@@ -225,6 +237,7 @@ def _extract_parameters(
                     location="header",
                     required=is_required(effective_default),
                     schema=field,
+                    **documentation,
                 )
             )
             continue
@@ -236,6 +249,7 @@ def _extract_parameters(
                     location="cookie",
                     required=is_required(effective_default),
                     schema=field,
+                    **documentation,
                 )
             )
             continue
@@ -249,6 +263,7 @@ def _extract_parameters(
                     location="query",
                     required=is_required(effective_default),
                     schema=field,
+                    **documentation,
                 )
             )
             continue
@@ -258,6 +273,9 @@ def _extract_parameters(
                 notes["request_body"] = "Multiple body parameters require manual review"
                 continue
             schema, _ = model_resolver.resolve_annotation(module_info.module, annotation, alias)
+            schema_documentation = documentation_from_call(marker_node, keys=("description", "examples", "json_schema_extra"))
+            media_documentation = documentation_from_call(marker_node, keys=("example", "openapi_examples"))
+            apply_documentation(schema, schema_documentation)
             embed = keyword_value(marker_node, "embed")
             if isinstance(embed, ast.Constant) and embed.value is True:
                 schema.required = is_required(effective_default)
@@ -266,6 +284,7 @@ def _extract_parameters(
                 required=is_required(effective_default),
                 content_type="application/json",
                 schema=schema,
+                **media_documentation,
             )
             continue
         field, _ = model_resolver.resolve_annotation(module_info.module, annotation, arg.arg)
@@ -304,7 +323,10 @@ def _extract_responses(
     if response_field is None and status_code not in {"204", "304"}:
         response_field = FieldSchema(name="response", type="unknown", analysis_note="Response schema is not declared or statically inferable")
     responses = {
-        status_code: ResponseSchema(status_code=status_code, content_type="application/json", schema=response_field),
+        status_code: ResponseSchema(status_code=status_code, content_type="application/json", schema=response_field,
+                                    description=route.get("response_description"),
+                                    documentation_notes={"description": route["documentation_notes"]["response_description"]}
+                                    if "response_description" in route.get("documentation_notes", {}) else {}),
         "422": ResponseSchema(
             status_code="422",
             content_type="application/json",

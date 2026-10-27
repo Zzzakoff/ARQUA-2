@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from drift_agent.diff_engine.classifier import make_drift_id
+import json
+from dataclasses import replace
+
+from drift_agent.diff_engine.classifier import drift_sort_key, make_drift_id
 from drift_agent.types import DriftCategory, DriftItem, EndpointContract, FieldSchema, NormalizedContract
 
 
@@ -38,11 +41,13 @@ def compute_drift(spec_contract: NormalizedContract, code_contract: NormalizedCo
         if item.id in seen:
             item.id = make_drift_id(item.endpoint, f"{item.location}|{item.detail}", item.category)
         seen.add(item.id)
-    return drift_items
+    return sorted(drift_items, key=drift_sort_key)
 
 
 def _compare_endpoint(endpoint: str, spec_endpoint: EndpointContract, code_endpoint: EndpointContract) -> list[DriftItem]:
-    items: list[DriftItem] = []
+    items = _compare_documentation(endpoint, "endpoint", spec_endpoint, code_endpoint)
+    items.extend(_compare_documentation_value(endpoint, "endpoint.summary", spec_endpoint.summary, code_endpoint.summary,
+                                              code_endpoint.documentation_notes.get("summary"), DriftCategory.DESCRIPTION_DRIFT))
     for scope, compare in (("parameters", _compare_parameters), ("request_body", _compare_request_bodies), ("responses", _compare_responses)):
         note = code_endpoint.analysis_notes.get(scope)
         if note:
@@ -58,41 +63,56 @@ def _compare_parameters(endpoint: str, spec_endpoint: EndpointContract, code_end
         return (param.name.lower() if param.location == "header" else param.name, param.location)
     spec_params = {parameter_key(param): param for param in spec_endpoint.parameters}
     code_params = {parameter_key(param): param for param in code_endpoint.parameters}
+    all_keys = spec_params.keys() | code_params.keys()
+
+    def location(key):
+        # Keep legacy locations unless the same name occurs in multiple origins.
+        if sum(name == key[0] for name, _ in all_keys) > 1:
+            return f"parameters.{key[1]}.{key[0]}"
+        return f"parameters.{key[0]}"
     for key in sorted(spec_params.keys() - code_params.keys()):
         items.append(
             _build_item(
                 endpoint,
                 DriftCategory.PARAMETER_DRIFT,
-                f"parameters.{key[0]}",
+                location(key),
                 f"Parameter '{key[0]}' is present in spec but missing in code",
                 f"{key[1]} parameter",
                 None,
                 "error",
             )
         )
+        items[-1].parameter_location = key[1]
     for key in sorted(code_params.keys() - spec_params.keys()):
         items.append(
             _build_item(
                 endpoint,
                 DriftCategory.PARAMETER_DRIFT,
-                f"parameters.{key[0]}",
+                location(key),
                 f"Parameter '{key[0]}' is present in code but missing in spec",
                 None,
                 f"{key[1]} parameter",
                 "warning",
             )
         )
+        items[-1].parameter_location = key[1]
     for key in sorted(spec_params.keys() & code_params.keys()):
+        start = len(items)
         if spec_params[key].required != code_params[key].required:
-            items.append(_build_item(endpoint, DriftCategory.REQUIRED_DRIFT, f"parameters.{key[0]}.required", "Parameter required flag differs", str(spec_params[key].required), str(code_params[key].required), "warning"))
+            items.append(_build_item(endpoint, DriftCategory.REQUIRED_DRIFT, f"{location(key)}.required", "Parameter required flag differs", str(spec_params[key].required), str(code_params[key].required), "warning"))
+        items.extend(_compare_documentation(endpoint, location(key), _parameter_documentation(spec_params[key]),
+                                            _parameter_documentation(code_params[key])))
         items.extend(
             _compare_schemas(
                 endpoint,
-                f"parameters.{key[0]}",
+                location(key),
                 spec_params[key].schema,
                 code_params[key].schema,
+                compare_documentation=False,
             )
         )
+        for item in items[start:]:
+            item.parameter_location = key[1]
     return items
 
 
@@ -103,6 +123,7 @@ def _compare_request_bodies(endpoint: str, spec_endpoint: EndpointContract, code
         return [_build_item(endpoint, DriftCategory.ADDITIVE_DRIFT, "request_body", "Code accepts a request body that spec does not define", None, "request body", "warning")]
     if spec_endpoint.request_body and code_endpoint.request_body:
         items = _compare_schemas(endpoint, "request_body.schema", spec_endpoint.request_body.schema, code_endpoint.request_body.schema)
+        items.extend(_compare_documentation(endpoint, "request_body", spec_endpoint.request_body, code_endpoint.request_body))
         if spec_endpoint.request_body.required != code_endpoint.request_body.required:
             items.append(_build_item(endpoint, DriftCategory.REQUIRED_DRIFT, "request_body.required", "Request body required flag differs", str(spec_endpoint.request_body.required), str(code_endpoint.request_body.required), "warning"))
         if spec_endpoint.request_body.content_type != code_endpoint.request_body.content_type:
@@ -136,18 +157,20 @@ def _compare_responses(endpoint: str, spec_endpoint: EndpointContract, code_endp
     for status in sorted(spec_codes & code_codes):
         if status == "422":
             continue
-        items.extend(
-            _compare_schemas(
+        schema_items = _compare_schemas(
                 endpoint,
                 f"response.{status}.schema",
                 spec_endpoint.responses[status].schema,
                 code_endpoint.responses[status].schema,
             )
-        )
+        items.extend(schema_items)
+        if not any(item.category == DriftCategory.ANALYSIS_LIMITATION for item in schema_items):
+            items.extend(_compare_documentation(endpoint, f"response.{status}", spec_endpoint.responses[status], code_endpoint.responses[status]))
     return items
 
 
-def _compare_schemas(endpoint: str, location: str, spec_schema: FieldSchema | None, code_schema: FieldSchema | None) -> list[DriftItem]:
+def _compare_schemas(endpoint: str, location: str, spec_schema: FieldSchema | None, code_schema: FieldSchema | None,
+                     compare_documentation: bool = True) -> list[DriftItem]:
     items: list[DriftItem] = []
     notes = [schema.analysis_note or "Schema type is unknown" for schema in (spec_schema, code_schema) if schema is not None and (schema.analysis_note or schema.type == "unknown")]
     if notes:
@@ -159,10 +182,13 @@ def _compare_schemas(endpoint: str, location: str, spec_schema: FieldSchema | No
     if code_schema is not None and spec_schema is None:
         return [_build_item(endpoint, DriftCategory.ADDITIVE_DRIFT, location, "Code defines a schema but spec does not", None, _schema_summary(code_schema), "warning")]
     assert spec_schema is not None and code_schema is not None
+    if compare_documentation:
+        items.extend(_compare_documentation(endpoint, location, spec_schema, code_schema))
     if spec_schema.type == "number" and code_schema.type == "integer":
         pass
     elif spec_schema.type != code_schema.type:
-        return [_build_item(endpoint, DriftCategory.TYPE_DRIFT, location, f"Type mismatch: spec={spec_schema.type}, code={code_schema.type}", _schema_summary(spec_schema), _schema_summary(code_schema), "error")]
+        items.append(_build_item(endpoint, DriftCategory.TYPE_DRIFT, location, f"Type mismatch: spec={spec_schema.type}, code={code_schema.type}", _schema_summary(spec_schema), _schema_summary(code_schema), "error"))
+        return items
     if spec_schema.nullable != code_schema.nullable:
         severity = "error" if not spec_schema.nullable and code_schema.nullable else "warning"
         items.append(_build_item(endpoint, DriftCategory.NULLABILITY_DRIFT, location, "Nullability differs between spec and code", str(spec_schema.nullable), str(code_schema.nullable), severity))
@@ -184,6 +210,44 @@ def _compare_schemas(endpoint: str, location: str, spec_schema: FieldSchema | No
     elif spec_schema.type == "array":
         items.extend(_compare_schemas(endpoint, f"{location}[]", spec_schema.items, code_schema.items))
     return items
+
+
+def _parameter_documentation(parameter):
+    """OpenAPI permits examples and descriptions on parameters and their schemas."""
+    values = {}
+    notes = dict(parameter.documentation_notes)
+    for attribute in ("description", "examples"):
+        if getattr(parameter, attribute) is None:
+            values[attribute] = getattr(parameter.schema, attribute)
+            if attribute in parameter.schema.documentation_notes:
+                notes[attribute] = parameter.schema.documentation_notes[attribute]
+    return replace(parameter, **values, documentation_notes=notes)
+
+
+def _compare_documentation(endpoint: str, location: str, spec, code) -> list[DriftItem]:
+    items = []
+    for attribute, category in (("description", DriftCategory.DESCRIPTION_DRIFT), ("examples", DriftCategory.EXAMPLE_DRIFT)):
+        if not hasattr(spec, attribute):
+            continue
+        note = spec.documentation_notes.get(attribute) or code.documentation_notes.get(attribute)
+        items.extend(_compare_documentation_value(endpoint, f"{location}.{attribute}", getattr(spec, attribute),
+                                                  getattr(code, attribute), note, category))
+    return items
+
+
+def _compare_documentation_value(endpoint, location, spec, code, note, category) -> list[DriftItem]:
+    if note:
+        return [_limitation(endpoint, location, note)]
+    if category == DriftCategory.DESCRIPTION_DRIFT:
+        normalize = lambda value: " ".join((value or "").split())
+    else:
+        # JSON distinguishes false from 0 and ignores object key order.
+        normalize = lambda value: json.dumps(value, sort_keys=True, ensure_ascii=False)
+    if normalize(spec) == normalize(code):
+        return []
+    evidence = lambda value: json.dumps(value, ensure_ascii=False, sort_keys=True) if value is not None else None
+    return [_build_item(endpoint, category, location, "Documentation differs between spec and code",
+                        evidence(spec), evidence(code), "info")]
 
 
 def _schema_summary(schema: FieldSchema) -> str:

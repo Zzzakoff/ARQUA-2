@@ -240,9 +240,12 @@ def _apply_ignore_rules(items: list[DriftItem], ignore_rules: list[dict[str, Any
         for rule in ignore_rules:
             endpoint_rule = rule.get("endpoint")
             category_rule = rule.get("category")
+            taxonomy_rule = rule.get("taxonomy")
             if endpoint_rule and not fnmatch(item.endpoint, endpoint_rule):
                 continue
             if category_rule and item.category.value != category_rule:
+                continue
+            if taxonomy_rule and item.taxonomy.value != taxonomy_rule:
                 continue
             ignored = True
             break
@@ -261,6 +264,8 @@ def _build_output(
     patch_report,
 ) -> dict[str, Any]:
     summary = Counter(item.severity for item in drift_items)
+    taxonomy_summary = Counter(item.taxonomy.value for item in drift_items)
+    priority_summary = Counter(item.priority for item in drift_items)
     payload = {
         "run_id": uuid.uuid4().hex[:8],
         "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -269,6 +274,8 @@ def _build_output(
         "spec_endpoints": len(spec_contract.endpoints),
         "code_endpoints": len(code_contract.endpoints),
         "items": [item.to_dict() for item in drift_items],
+        "taxonomy_summary": dict(sorted(taxonomy_summary.items())),
+        "priority_summary": {priority: priority_summary[priority] for priority in ("P1", "P2", "P3")},
         "summary": {
             "error": summary.get("error", 0),
             "warning": summary.get("warning", 0),
@@ -295,15 +302,16 @@ def _build_output(
 def _emit_output(payload: dict[str, Any], output_format: str, output_file: str | None, already_rendered: bool = False) -> None:
     if output_format == "json":
         text = json.dumps(payload, indent=2)
-        console.print(text)
+        typer.echo(text)
     elif not already_rendered:
         table = Table(title=f"DRIFT REPORT  {payload['spec_path']} <-> {payload['src_path']}")
         table.add_column("Severity")
+        table.add_column("Priority / taxonomy")
         table.add_column("Endpoint")
         table.add_column("Location")
         table.add_column("Detail")
         for item in payload["items"]:
-            table.add_row(item["severity"].upper(), item["endpoint"], item["location"], item["detail"])
+            table.add_row(item["severity"].upper(), f"{item['priority']} / {item['taxonomy']}", item["endpoint"], item["location"], item["detail"])
         console.print(table)
         console.print(
             f"{payload['summary']['total']} drift items | "
@@ -436,7 +444,8 @@ def _deterministic_panel(drift_items: list[DriftItem], offset: int = 0) -> Panel
     table.add_column("detail", overflow="fold", ratio=3)
     for item in visible_items:
         severity_style = ERROR if item.severity == "error" else WARN if item.severity == "warning" else BLUE
-        table.add_row(f"[{severity_style}]{item.severity.upper()}[/]", item.endpoint, item.location, item.detail)
+        table.add_row(f"[{severity_style}]{item.priority}\n{item.severity.upper()}[/]", item.endpoint, item.location,
+                      f"{item.taxonomy.value}\n{item.detail}")
     if not drift_items:
         table.add_row(f"[{MUTED}]WAIT[/]", "deterministic scan pending", "", "")
     else:

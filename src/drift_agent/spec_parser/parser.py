@@ -7,6 +7,8 @@ from typing import Any
 
 import yaml
 
+from drift_agent.documentation import documentation_from_mapping
+
 from drift_agent.errors import (
     SpecLoadError,
     SpecParseError,
@@ -121,6 +123,7 @@ def _build_endpoint(
                 location=item.get("in", "query"),
                 required=bool(item.get("required", item.get("in") == "path")),
                 schema=field,
+                **documentation_from_mapping(item),
             )
         )
     request_body = None
@@ -131,7 +134,9 @@ def _build_endpoint(
         content_type, payload = _pick_content(content)
         if payload is not None:
             schema = _normalize_schema(payload.get("schema") or {"type": "object"}, name="body", required=True)
-            request_body = RequestBodySchema(required=required, content_type=content_type, schema=schema)
+            body_metadata = documentation_from_mapping(payload)
+            body_metadata.update(documentation_from_mapping(body_doc))
+            request_body = RequestBodySchema(required=required, content_type=content_type, schema=schema, **body_metadata)
     responses = {}
     for status_code, response_doc in (operation.get("responses") or {}).items():
         if not isinstance(response_doc, dict):
@@ -144,6 +149,7 @@ def _build_endpoint(
             status_code=str(status_code),
             content_type=content_type,
             schema=schema,
+            **documentation_from_mapping({**(payload or {}), **response_doc}),
         )
     return EndpointContract(
         method=method.upper(),
@@ -152,6 +158,8 @@ def _build_endpoint(
         request_body=request_body,
         responses=responses,
         tags=list(operation.get("tags") or []),
+        summary=operation.get("summary"),
+        **documentation_from_mapping(operation),
     )
 
 
@@ -187,8 +195,8 @@ def _normalize_schema(schema: dict[str, Any] | None, name: str, required: bool) 
         required=required,
         nullable=nullable,
         enum=list(schema.get("enum")) if isinstance(schema.get("enum"), list) else None,
-        description=schema.get("description"),
         analysis_note=analysis_note,
+        **documentation_from_mapping(schema),
     )
     if field.type == "array":
         field.items = _normalize_schema(schema.get("items") or {}, name=f"{name}[]", required=True)
@@ -225,7 +233,11 @@ def _flatten_allof(schema: dict[str, Any]) -> dict[str, Any]:
                 merged["required"] = sorted(set([*merged["required"], *value]))
             elif key not in merged:
                 merged[key] = value
-    return merged
+    result = {**schema, **merged}
+    for key in ("description", "example", "examples"):
+        if key in schema:
+            result[key] = schema[key]
+    return result
 
 
 def _flatten_union(schema: dict[str, Any]) -> dict[str, Any]:
@@ -241,7 +253,10 @@ def _flatten_union(schema: dict[str, Any]) -> dict[str, Any]:
     non_null_variants = [item for item in normalized if _determine_type(item) != "null"]
     if len(non_null_types) == 1 and len(non_null_variants) == 1:
         base = next(item for item in normalized if _determine_type(item) != "null")
-        base = dict(base)
+        base = {**schema, **base}
+        for key in ("description", "example", "examples"):
+            if key in schema:
+                base[key] = schema[key]
         if has_null:
             base["nullable"] = True
         return base

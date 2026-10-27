@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from drift_agent.types import FieldSchema
+from drift_agent.documentation import apply_documentation, documentation_from_call, documentation_from_mapping
 from drift_agent.code_analyzer.syntax import is_required, keyword_value, name_of, unwrap_annotated
 
 LOGGER = logging.getLogger(__name__)
@@ -84,6 +85,8 @@ class ModelResolver:
         for statement in class_info.node.body:
             if not isinstance(statement, ast.AnnAssign) or not isinstance(statement.target, ast.Name):
                 continue
+            if statement.target.id == "model_config":
+                continue
             base_annotation, metadata = unwrap_annotated(statement.annotation)
             declaration = statement.value
             annotated_field = next((item for item in metadata if isinstance(item, ast.Call) and name_of(item.func) == "Field"), None)
@@ -93,13 +96,31 @@ class ModelResolver:
             annotation, nullable = self.resolve_annotation(class_info.module, base_annotation, field_name, stack)
             annotation.required = is_required(declaration if declaration is not None else annotated_field)
             annotation.nullable = annotation.nullable or nullable
-            description = keyword_value(field_call, "description")
-            if isinstance(description, ast.Constant) and isinstance(description.value, str):
-                annotation.description = description.value
+            apply_documentation(annotation, documentation_from_call(field_call))
             if any(keyword_value(field_call, option) is not None for option in ("validation_alias", "serialization_alias")):
                 model_note = "Separate validation/serialization aliases require manual review"
             properties[field_name] = annotation
-        return FieldSchema(name=class_name, type="object", required=required, properties=properties, analysis_note=model_note)
+        result = FieldSchema(name=class_name, type="object", required=required, properties=properties, analysis_note=model_note,
+                             description=ast.get_docstring(class_info.node))
+        for statement in class_info.node.body:
+            if not isinstance(statement, (ast.Assign, ast.AnnAssign)):
+                continue
+            targets = statement.targets if isinstance(statement, ast.Assign) else [statement.target]
+            if not any(isinstance(target, ast.Name) and target.id == "model_config" for target in targets):
+                continue
+            value = statement.value
+            if isinstance(value, ast.Call):
+                apply_documentation(result, documentation_from_call(value))
+            elif value is not None:
+                try:
+                    config = ast.literal_eval(value)
+                except (ValueError, TypeError, SyntaxError):
+                    result.documentation_notes["examples"] = "Computed model_config requires manual review"
+                else:
+                    extra = config.get("json_schema_extra") if isinstance(config, dict) else None
+                    if isinstance(extra, dict):
+                        apply_documentation(result, documentation_from_mapping(extra))
+        return result
 
     def resolve_annotation(self, module_name: str, annotation: ast.AST | None, field_name: str, stack: tuple[str, ...] = ()) -> tuple[FieldSchema, bool]:
         annotation, _ = unwrap_annotated(annotation)
