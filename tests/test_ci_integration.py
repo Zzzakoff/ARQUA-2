@@ -2,11 +2,20 @@ import importlib.util
 import json
 from pathlib import Path
 
+import pytest
+
 
 CI_SCRIPT = Path(__file__).resolve().parents[1] / ".github" / "scripts" / "ci_check.py"
 spec = importlib.util.spec_from_file_location("ci_check", CI_SCRIPT)
 ci = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(ci)
+
+
+@pytest.fixture(autouse=True)
+def _github_environment(monkeypatch):
+    # Тестовые находки не должны попадать в настоящую сводку GitHub.
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
 
 
 def _example(tmp_path: Path):
