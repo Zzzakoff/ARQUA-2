@@ -35,13 +35,14 @@ class SpecResolver:
             return {
                 "type": "object",
                 "description": f"[circular ref: {ref}]",
+                "_analysis_note": f"Recursive reference {ref} is not expanded further",
             }
         if ref in self._cache:
             return copy.deepcopy(self._cache[ref])
         target = self._walk_pointer(ref)
         if target is None:
             LOGGER.warning("Missing ref target: %s", ref)
-            return None
+            return {"type": "unknown", "_analysis_note": f"Reference target not found: {ref}"}
         resolved = self._resolve_node(copy.deepcopy(target), [*stack, ref])
         self._cache[ref] = resolved
         return copy.deepcopy(resolved)

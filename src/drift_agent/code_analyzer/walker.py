@@ -18,8 +18,12 @@ def analyze_codebase(project_root: str | Path) -> NormalizedContract:
     if not root.exists():
         raise CodeAnalysisError(f"Source path does not exist: {root}")
     modules: dict[str, ModuleInfo] = {}
-    for file_path in sorted(root.rglob("*.py")):
-        relative = file_path.relative_to(root)
+    files = [root] if root.is_file() else sorted(root.rglob("*.py"))
+    source_root = root.parent if root.is_file() else root
+    for file_path in files:
+        relative = file_path.relative_to(source_root)
+        if any(part in {".venv", "venv", ".git", "__pycache__", "site-packages", "node_modules"} for part in relative.parts):
+            continue
         module_name = ".".join(relative.with_suffix("").parts)
         try:
             tree = ast.parse(file_path.read_text(encoding="utf-8"))
@@ -31,12 +35,31 @@ def analyze_codebase(project_root: str | Path) -> NormalizedContract:
         modules[module_name] = module_info
     routers = _collect_routers(modules)
     includes = _collect_includes(modules)
-    endpoints = extract_endpoints(root, modules, routers, includes, ModelResolver(modules))
+    diagnostics: list[dict] = []
+    for module in modules.values():
+        for node in ast.walk(module.tree):
+            if isinstance(node, ast.Call):
+                reason = None
+                if isinstance(node.func, ast.Attribute) and node.func.attr in {"add_api_route", "add_route", "mount"}:
+                    reason = "Programmatic route registration is not expanded"
+                elif isinstance(node.func, ast.Attribute) and node.func.attr == "include_router":
+                    if not node.args or any(kw.arg == "prefix" and not isinstance(kw.value, ast.Constant) for kw in node.keywords):
+                        reason = "Computed router inclusion is not expanded"
+                    elif _owner_to_key(module, node.args[0]) not in routers:
+                        reason = "Included router could not be resolved"
+                elif _name_from_expr(node.func) in {"FastAPI", "APIRouter"}:
+                    if any(kw.arg == "prefix" and not isinstance(kw.value, ast.Constant) for kw in node.keywords):
+                        reason = "Computed router prefix could not be resolved"
+                if reason:
+                    diagnostics.append({"scope": "routes", "message": reason, "source_file": str(module.filepath.relative_to(source_root)), "source_line": node.lineno})
+    endpoints = extract_endpoints(source_root, modules, routers, includes, ModelResolver(modules), diagnostics)
     metadata = {
         "app_file": _guess_app_file(root, endpoints),
         "framework_version": "fastapi",
         "python_version": platform.python_version(),
         "project_root": str(root),
+        "diagnostics": diagnostics,
+        "analysis_complete": not diagnostics,
     }
     return NormalizedContract(endpoints=endpoints, source="code", metadata=metadata)
 
@@ -149,6 +172,8 @@ def _owner_to_key(module_info: ModuleInfo, owner: ast.AST) -> str:
 
 
 def _resolve_module_reference(current_module: str, module: str | None, level: int) -> str:
+    if level == 0:
+        return module or ""
     parts = current_module.split(".")
     if level:
         parts = parts[:-level]

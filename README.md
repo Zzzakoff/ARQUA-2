@@ -1,5 +1,20 @@
 # api-drift-agent
 
+## Классификация и приоритизация расхождений
+
+Добавлена единая таксономия эндпоинтов, параметров, схем, обязательности/nullable,
+кодов ответов, описаний и примеров. Находки содержат `taxonomy`, `priority`
+и `parameter_location`; JSON и TUI показывают результаты в порядке приоритета.
+Правила, ограничения и запуск проверок: [классификация](docs/CLASSIFICATION.md).
+
+## Доработка статического анализа по пункту 1
+
+Поддержка маршрутов, параметров, обязательности полей и диагностики неопределённости
+расширена. Описание, примеры и формат находок 1.1: [статический анализ](docs/STATIC_ANALYSIS.md).
+Новые проверки размещены отдельно от командной папки `tests`:
+`python -m pytest tests checks/static_analysis -q`.
+Результаты и покрытие: [отчёт](checks/static_analysis/RESULTS.md).
+
 `api-drift-agent` detects drift between an OpenAPI 3.x contract and a FastAPI codebase.
 
 ![](/assets/first.gif)
