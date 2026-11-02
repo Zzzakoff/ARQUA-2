@@ -1,0 +1,16 @@
+{
+  "test_case": "02_simple",
+  "description": "Фикстура simple. Все 10 находок — истинно положительные.",
+  "expected": [
+    {"endpoint": "GET /users",                "category": "missing_endpoint"},
+    {"endpoint": "GET /users/{user_id}",      "category": "parameter_drift",   "location": "parameters.X-Trace-Id"},
+    {"endpoint": "GET /users/{user_id}",      "category": "parameter_drift",   "location": "parameters.include_meta"},
+    {"endpoint": "GET /users/{user_id}",      "category": "additive_drift",    "location": "response.200.schema.email"},
+    {"endpoint": "GET /users/{user_id}",      "category": "additive_drift",    "location": "response.200.schema.name"},
+    {"endpoint": "GET /users/{user_id}",      "category": "required_drift",    "location": "response.200.schema.created_at"},
+    {"endpoint": "POST /users",               "category": "additive_drift",    "location": "request_body.schema.nickname"},
+    {"endpoint": "POST /users",               "category": "required_drift",    "location": "request_body.schema.email"},
+    {"endpoint": "POST /users",               "category": "additive_drift",    "location": "response.201.schema.created_at"},
+    {"endpoint": "POST /users",               "category": "additive_drift",    "location": "response.201.schema.email"}
+  ]
+}

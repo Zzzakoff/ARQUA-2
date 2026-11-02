@@ -1,0 +1,2 @@
+# From the project root: python -m pip install -r requirements.txt
+-e .

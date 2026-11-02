@@ -1,0 +1,32 @@
+openapi: "3.0.3"
+info:
+  title: Circular API
+  version: "1.0.0"
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        address:
+          $ref: '#/components/schemas/Address'
+    Address:
+      type: object
+      properties:
+        owner:
+          $ref: '#/components/schemas/User'
+paths:
+  /users/{user_id}:
+    get:
+      parameters:
+        - name: user_id
+          in: path
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+

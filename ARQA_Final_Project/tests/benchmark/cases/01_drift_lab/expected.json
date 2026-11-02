@@ -1,0 +1,28 @@
+{
+  "test_case": "01_drift_lab",
+  "description": "Эталонная фикстура drift_lab. Все 22 находки ожидаются как истинно положительные.",
+  "expected": [
+    {"endpoint": "GET /reports/summary",          "category": "missing_endpoint"},
+    {"endpoint": "DELETE /api/orders/{order_id}", "category": "ghost_endpoint"},
+    {"endpoint": "GET /health",                   "category": "ghost_endpoint"},
+    {"endpoint": "GET /internal/metrics",         "category": "ghost_endpoint"},
+    {"endpoint": "GET /admin/audit",              "category": "additive_drift",    "location": "response.200.schema[].actor"},
+    {"endpoint": "GET /api/orders",               "category": "type_drift",        "location": "parameters.limit"},
+    {"endpoint": "GET /api/orders",               "category": "nullability_drift", "location": "parameters.status"},
+    {"endpoint": "GET /api/orders",               "category": "additive_drift",    "location": "response.200.schema[].items"},
+    {"endpoint": "GET /api/orders",               "category": "type_drift",        "location": "response.200.schema[].status"},
+    {"endpoint": "GET /api/users/{user_id}",      "category": "parameter_drift",   "location": "parameters.session_id"},
+    {"endpoint": "GET /api/users/{user_id}",      "category": "nullability_drift", "location": "parameters.X-Trace-Id"},
+    {"endpoint": "GET /api/users/{user_id}",      "category": "destructive_drift", "location": "response.200.schema.legacy_code"},
+    {"endpoint": "GET /api/users/{user_id}",      "category": "additive_drift",    "location": "response.200.schema.deleted_at"},
+    {"endpoint": "GET /api/users/{user_id}",      "category": "type_drift",        "location": "response.200.schema.role"},
+    {"endpoint": "POST /api/orders",              "category": "type_drift",        "location": "request_body.schema.priority"},
+    {"endpoint": "POST /api/orders",              "category": "additive_drift",    "location": "response.201.schema.items"},
+    {"endpoint": "POST /api/users",               "category": "additive_drift",    "location": "request_body.schema.marketing_opt_in"},
+    {"endpoint": "POST /api/users",               "category": "required_drift",    "location": "request_body.schema.inviteCode"},
+    {"endpoint": "POST /api/users",               "category": "nullability_drift", "location": "request_body.schema.inviteCode"},
+    {"endpoint": "POST /api/users",               "category": "type_drift",        "location": "request_body.schema.role"},
+    {"endpoint": "POST /api/users",               "category": "status_code_drift", "location": "response.200"},
+    {"endpoint": "POST /api/users",               "category": "status_code_drift", "location": "response.201"}
+  ]
+}

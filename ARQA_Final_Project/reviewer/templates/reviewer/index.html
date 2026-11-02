@@ -1,0 +1,169 @@
+{% extends 'reviewer/base.html' %}
+{% block title %}Patch Review — OpenAPI review{% endblock %}
+
+{% block content %}
+<section class="hero-panel fade-up mb-4">
+  <div class="eyebrow">OpenAPI Review</div>
+  <h1 class="display-title"><span class="gradient-text">Ревью результатов API drift</span></h1>
+  <p class="hero-copy mb-0">
+    Загрузите ZIP с FastAPI-кодом и OpenAPI, чтобы найти несоответствия прямо на сайте. Или импортируйте готовый JSON-отчёт для ревью.
+  </p>
+  <div class="hero-stats">
+    <span class="mini-stat"><i class="bi bi-braces"></i> Drift report JSON</span>
+    <span class="mini-stat"><i class="bi bi-diagram-3"></i> Static analyzer data</span>
+    <span class="mini-stat"><i class="bi bi-person-check"></i> Manual review</span>
+    <span class="mini-stat"><i class="bi bi-file-diff"></i> JSON / Markdown / HTML / Patch</span>
+  </div>
+</section>
+
+<section class="card upload-card mb-4 fade-up" id="project-scan">
+  <div class="card-body">
+    <div class="eyebrow mb-1">Интегрированный анализ</div>
+    <h2 class="h4 section-title mb-2"><i class="bi bi-file-earmark-zip me-2"></i>Проверить ZIP-проект</h2>
+    <p class="section-caption">Загрузите Python/FastAPI-проект. Спецификацию OpenAPI 3.x можно приложить отдельно или оставить внутри ZIP (openapi.yaml / openapi.json). Код проекта не запускается: анализ выполняется статически.</p>
+    {% if project_form.errors %}
+      <div class="alert alert-danger"><strong>Не удалось начать анализ:</strong><ul class="mb-0">
+      {% for field, errors in project_form.errors.items %}{% for err in errors %}<li>{{ field }}: {{ err }}</li>{% endfor %}{% endfor %}
+      </ul></div>
+    {% endif %}
+    {% if user.is_authenticated %}
+    <form method="post" action="{% url 'create_project_scan' %}" enctype="multipart/form-data" class="row g-3">
+      {% csrf_token %}
+      <div class="col-md-6"><label class="form-label">{{ project_form.name.label }}</label>{{ project_form.name }}</div>
+      <div class="col-md-6"><label class="form-label">{{ project_form.project_archive.label }}</label>{{ project_form.project_archive }}</div>
+      <div class="col-md-6"><label class="form-label">{{ project_form.specification.label }}</label>{{ project_form.specification }}</div>
+      <div class="col-md-6"><label class="form-label">{{ project_form.llm_provider.label }}</label>{{ project_form.llm_provider }}</div>
+      <div class="col-md-8"><label class="form-label">{{ project_form.llm_model.label }}</label>{{ project_form.llm_model }}</div>
+      <div class="col-md-4 d-flex align-items-center"><div class="form-check">{{ project_form.use_llm }} <label class="form-check-label" for="{{ project_form.use_llm.id_for_label }}">{{ project_form.use_llm.label }}</label></div></div>
+      <div class="col-12"><small class="section-caption">LLM необязательна: без неё выполняется настоящий статический анализ, но рекомендации по последствиям не генерируются. Для Groq требуется ключ в переменной окружения. При включении Groq фрагменты находок отправляются внешнему провайдеру. Обрабатываются первые 15 находок, процесс синхронный.</small></div>
+      <div class="col-12"><button type="submit" class="btn btn-primary px-4"><i class="bi bi-search me-1"></i> Анализировать проект</button></div>
+    </form>
+    {% else %}
+      <p class="section-caption">Для загрузки исходного кода нужно войти в аккаунт. Импортировать подготовленный JSON-отчёт можно ниже.</p>
+      <a href="{% url 'login' %}" class="btn btn-primary">Войти для анализа ZIP</a>
+    {% endif %}
+  </div>
+</section>
+
+<div class="row g-4 align-items-stretch mb-5">
+  <div class="col-lg-8">
+    <section class="card upload-card h-100 fade-up">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+          <div>
+            <div class="eyebrow mb-1">Новый скан</div>
+            <h2 class="h4 section-title mb-1">Импортировать результаты анализа</h2>
+            <div class="section-caption">Резервный режим: импорт готового JSON из api-drift-agent. OpenAPI можно приложить для аудита.</div>
+          </div>
+          <span class="brand-mark"><i class="bi bi-box-arrow-in-down"></i></span>
+        </div>
+
+        {% if form.errors %}
+          <div class="alert alert-danger">
+            <b>Не удалось импортировать данные.</b>
+            <ul class="mb-0 mt-1">
+              {% for field, errors in form.errors.items %}
+                {% for err in errors %}<li>{{ err }}</li>{% endfor %}
+              {% endfor %}
+            </ul>
+          </div>
+        {% endif %}
+
+        <form method="post" enctype="multipart/form-data" novalidate>
+          {% csrf_token %}
+          <div class="mb-3">
+            <label class="form-label">{{ form.name.label }}</label>
+            {{ form.name }}
+            <div class="form-text">Если поле оставить пустым, название будет взято из отчёта.</div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">{{ form.drift_report.label }}</label>
+            <div class="upload-zone compact-upload" data-upload-zone>
+              <div>
+                <div class="upload-icon mx-auto"><i class="bi bi-filetype-json"></i></div>
+                <strong>Выберите drift-report.json</strong><br>
+                <span>или перетащите файл сюда</span>
+                <div class="file-name" data-file-name>JSON · до 10 МБ</div>
+              </div>
+              {{ form.drift_report }}
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label">{{ form.specification.label }} <span class="optional-label">необязательно</span></label>
+            {{ form.specification }}
+            <div class="form-text">OpenAPI 3.x в YAML или JSON. Нужен только как исходный артефакт скана.</div>
+          </div>
+
+          <button class="btn btn-primary mt-1 px-4">
+            <i class="bi bi-arrow-right-circle-fill me-1"></i> Импортировать скан
+          </button>
+        </form>
+      </div>
+    </section>
+  </div>
+
+  <div class="col-lg-4">
+    <section class="card h-100 fade-up">
+      <div class="card-body d-flex flex-column">
+        <div class="eyebrow mb-1">Источник данных</div>
+        <h2 class="h4 section-title mb-3">Как получить отчёт</h2>
+        <p class="section-caption">Для api-drift-agent используется JSON-вывод детерминированного анализатора.</p>
+        <div class="command-box mb-4">drift-check --spec openapi.yaml --src ./app --output-format json --output-file drift-report.json</div>
+        <div class="d-grid gap-3 mt-auto">
+          <div class="d-flex gap-3">
+            <span class="brand-mark flex-shrink-0"><i class="bi bi-search"></i></span>
+            <div><strong>Анализ</strong><div class="section-caption">Анализатор сравнивает OpenAPI и FastAPI-код.</div></div>
+          </div>
+          <div class="d-flex gap-3">
+            <span class="brand-mark flex-shrink-0"><i class="bi bi-box-arrow-in-down"></i></span>
+            <div><strong>Импорт</strong><div class="section-caption">Каждый drift item становится отдельным элементом очереди ревью.</div></div>
+          </div>
+          <div class="d-flex gap-3">
+            <span class="brand-mark flex-shrink-0"><i class="bi bi-person-check"></i></span>
+            <div><strong>Ревью</strong><div class="section-caption">Ревьюер принимает, отклоняет или редактирует рекомендацию.</div></div>
+          </div>
+          <div class="d-flex gap-3">
+            <span class="brand-mark flex-shrink-0"><i class="bi bi-download"></i></span>
+            <div><strong>Экспорт</strong><div class="section-caption">В итог попадают только принятые изменения.</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<section class="fade-up">
+  <div class="d-flex justify-content-between align-items-end gap-3 mb-3">
+    <div>
+      <div class="eyebrow mb-1">История</div>
+      <h2 class="h4 section-title mb-0">Последние сканы</h2>
+    </div>
+    <span class="section-caption">{{ scans|length }} в списке</span>
+  </div>
+
+  <div class="scan-grid">
+    {% for scan in scans %}
+      <a href="{% url 'scan_detail' scan.id %}" class="scan-item">
+        <div class="d-flex justify-content-between gap-3 align-items-start">
+          <div>
+            <div class="scan-item-title">{{ scan.name }}</div>
+            <div class="scan-meta mt-2"><i class="bi bi-clock me-1"></i>{{ scan.created_at|date:'d.m.Y H:i' }}{% if scan.run_id %} · run {{ scan.run_id }}{% endif %}</div>
+            <div class="scan-summary-row mt-2">
+              <span class="severity-pill severity-error">{{ scan.error_count }} error</span>
+              <span class="severity-pill severity-warning">{{ scan.warning_count }} warning</span>
+              <span class="severity-pill severity-info">{{ scan.info_count }} info</span>{% if scan.project_archive %}<span class="severity-pill severity-warning">ZIP · {{ scan.scan_status }}</span>{% endif %}
+            </div>
+          </div>
+          <span class="scan-arrow"><i class="bi bi-arrow-up-right"></i></span>
+        </div>
+      </a>
+    {% empty %}
+      <div class="glass-card p-4 text-center" style="grid-column: 1/-1; color: var(--muted);">
+        <i class="bi bi-inbox fs-3 d-block mb-2"></i>Пока нет импортированных сканов.
+      </div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

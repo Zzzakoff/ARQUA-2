@@ -1,0 +1,9 @@
+{
+  "test_case": "03_edge_cases",
+  "description": "Свой кейс: 3 заложенных расхождения (missing_endpoint, ghost_endpoint, type_drift).",
+  "expected": [
+    {"endpoint": "GET /legacy", "category": "missing_endpoint"},
+    {"endpoint": "GET /extra",  "category": "ghost_endpoint"},
+    {"endpoint": "GET /typed",  "category": "type_drift", "location": "response.200.schema.count"}
+  ]
+}

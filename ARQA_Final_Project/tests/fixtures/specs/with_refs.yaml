@@ -1,0 +1,37 @@
+openapi: "3.0.3"
+info:
+  title: Ref API
+  version: "1.0.0"
+components:
+  schemas:
+    User:
+      type: object
+      required: [id, profile]
+      properties:
+        id:
+          type: integer
+        profile:
+          $ref: '#/components/schemas/Profile'
+    Profile:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+paths:
+  /users/{user_id}:
+    get:
+      parameters:
+        - name: user_id
+          in: path
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+
